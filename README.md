@@ -53,6 +53,12 @@ docker compose up -d
 
 ## Usage
 
+### CLI
+
+```console
+python3 manage-webhooks.py help
+```
+
 ### Running the API
 
 By default, the API binds itself to `http://0.0.0.0:8000`.
@@ -61,10 +67,19 @@ By default, the API binds itself to `http://0.0.0.0:8000`.
 
 Once the API is running, you can access the Swagger documentation at `http://127.0.0.1:8000/docs`.
 
-## Data Structure
+### Adding webhooks
 
-Each earthquake record contains the following fields:
+```console
+python3 manage-webhooks.py <type> <url> <name>
+```
 
+#### Currently supported webhook providers
+
+Discord,
+Zulip (slack_incoming),
+Generic json```{count: n, data:[{},{}] }```
+
+Each data object structured like
 ```json
 {
   "timestamp": "2023-11-15T08:18:34Z",
@@ -81,8 +96,6 @@ Each earthquake record contains the following fields:
   "quality": "İlksel"
 }
 ```
-
-The database file is stored at `data/earthquakes.db` by default.
 
 ## License
 
