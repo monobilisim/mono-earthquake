@@ -55,11 +55,11 @@ docker compose up -d
 
 ### Running the API
 
-By default, the API will be available at `http://localhost:8000`.
+By default, the API binds itself to `http://0.0.0.0:8000`.
 
 ### API Documentation
 
-Once the API is running, you can access the Swagger documentation at `http://localhost:8000/docs`.
+Once the API is running, you can access the Swagger documentation at `http://127.0.0.1:8000/docs`.
 
 ## Data Structure
 
