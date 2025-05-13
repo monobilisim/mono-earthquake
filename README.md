@@ -77,7 +77,10 @@ python3 manage-webhooks.py <type> <url> <name>
 
 Discord,
 Zulip (slack_incoming),
-Generic json```{count: n, data:[{},{}] }```
+Generic
+```json
+{count: n, data:[{},{}] }
+```
 
 Each data object structured like
 ```json
