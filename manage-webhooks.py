@@ -331,7 +331,7 @@ def show_help():
     print("  list                           - List all webhooks")
     print("  list <type>                    - List webhooks of a specific type")
     print("  test <name>                    - Test a webhook by sending a test message")
-    print("  send <name>                    - Send latest earthquake data to a webhook")
+    print("  send <name>                    - Send latest earthquake data to a specific webhook")
     print("\nValid webhook types:")
     for t in VALID_WEBHOOK_TYPES:
         print(f"  - {t}")
@@ -367,14 +367,9 @@ def main():
         name = sys.argv[2]
         test_webhook(name)
 
-    elif command == "send":
-        if len(sys.argv) == 3:
-            name = sys.argv[2]
-            send_latest_earthquake(name)
-        elif len(sys.argv) == 2:
-            print("Name is not provided")
-        else:
-            show_help()
+    elif command == "send" and len(sys.argv) == 3:
+        name = sys.argv[2]
+        send_latest_earthquake(name)
 
     else:
         print("Error: Invalid command or arguments")
