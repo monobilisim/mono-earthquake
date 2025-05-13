@@ -138,20 +138,20 @@ def list_webhooks(webhook_type=None):
         # Print table header
         if webhook_type:
             # If type is provided, omit the Type column
-            print(f"{'ID':<5} {'Name':<20} {'URL':<50} {'Last Sent':<25}")
+            print(f"{'ID':<5} {'Name':<20} {'Last Sent':<30} {'URL':<50}")
             print("-" * 100)
 
             for webhook in webhooks:
                 last_sent = webhook['last_sent_at'] or "Never"
-                print(f"{webhook['id']:<5} {webhook['name']:<20} {webhook['url']:<50} {last_sent:<25}")
+                print(f"{webhook['id']:<5} {webhook['name']:<20} {last_sent:<30} {webhook['url']:<50}")
         else:
             # If no type is provided, show all columns including Type
-            print(f"{'ID':<5} {'Name':<20} {'Type':<10} {'URL':<50} {'Last Sent':<25}")
+            print(f"{'ID':<5} {'Name':<20} {'Type':<10} {'Last Sent':<30} {'URL':<50}")
             print("-" * 110)
 
             for webhook in webhooks:
                 last_sent = webhook['last_sent_at'] or "Never"
-                print(f"{webhook['id']:<5} {webhook['name']:<20} {webhook['type']:<10} {webhook['url']:<50} {last_sent:<25}")
+                print(f"{webhook['id']:<5} {webhook['name']:<20} {webhook['type']:<10} {last_sent:<30} {webhook['url']:<50}")
 
     except sqlite3.Error as e:
         print(f"Error listing webhooks: {e}", file=sys.stderr)
