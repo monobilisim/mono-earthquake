@@ -14,8 +14,34 @@ def discord(webhook_url, earthquake_data=None):
     """
     if earthquake_data is None:
         # Send a test message if no earthquake data is provided
-        # [... existing test message code ...]
-        return False
+        payload = {
+            "content": "🔔 **Test Notification from Earthquake API**",
+            "embeds": [
+                {
+                    "title": "This is a test message",
+                    "description": "Your webhook is configured correctly!",
+                    "color": 3066993,  # Green color
+                    "footer": {
+                        "text": f"Sent on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                    }
+                }
+            ]
+        }
+        
+        # Send the webhook
+        try:
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
+            
+            if response.status_code == 204:  # Discord returns 204 No Content on success
+                print(f"Successfully sent test message to Discord webhook")
+                return True
+            else:
+                print(f"Error sending to Discord webhook: {response.status_code} - {response.text}")
+                return False
+        except Exception as e:
+            print(f"Error sending to Discord webhook: {str(e)}")
+            return False
 
     # Extract individual earthquake records if the data is in API response format
     if isinstance(earthquake_data, dict) and "data" in earthquake_data and isinstance(earthquake_data["data"], list):
@@ -308,4 +334,41 @@ def send_whatsapp_message(webhook_url, message_body, recipient=None):
             return False
     except Exception as e:
         print(f"Error sending to WhatsApp webhook: {str(e)}")
+        return False
+
+
+def generic(webhook_url, earthquake_data=None):
+    """
+    Send earthquake data to a generic webhook endpoint.
+    
+    Args:
+        webhook_url: The webhook URL
+        earthquake_data: Optional dictionary containing earthquake data.
+                        If None, sends a test message.
+    """
+    if earthquake_data is None:
+        # Create a test message
+        test_data = {
+            "message": "Test notification from Earthquake API",
+            "timestamp": datetime.now().isoformat(),
+            "status": "test"
+        }
+        payload = test_data
+    else:
+        # Send the raw data
+        payload = earthquake_data
+    
+    # Send to the webhook
+    try:
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(webhook_url, json=payload, headers=headers)
+        
+        if 200 <= response.status_code < 300:  # Any 2XX status code is success
+            print(f"Successfully sent to generic webhook (status {response.status_code})")
+            return True
+        else:
+            print(f"Error sending to generic webhook: {response.status_code} - {response.text}")
+            return False
+    except Exception as e:
+        print(f"Error sending to generic webhook: {str(e)}")
         return False
