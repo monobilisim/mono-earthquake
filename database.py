@@ -419,7 +419,7 @@ class EarthquakeDatabase:
             logger.error(f"Error searching earthquakes: {e}")
             raise Exception(f"Error searching earthquakes: {e}")
 
-    def register_webhook(self, name: str, url: str) -> int:
+    def register_webhook(self, name: str, url: str) -> Optional[int]:
         """
         Register a new webhook.
 
@@ -431,6 +431,7 @@ class EarthquakeDatabase:
         Returns:
             ID of the newly created webhook
         """
+        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -447,7 +448,8 @@ class EarthquakeDatabase:
             conn.commit()
             return cursor.lastrowid
         except sqlite3.Error as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             logger.error(f"Error registering webhook: {e}")
             raise Exception(f"Error registering webhook: {e}")
 
@@ -461,6 +463,7 @@ class EarthquakeDatabase:
         Returns:
             True if successful, False if webhook not found
         """
+        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -477,7 +480,8 @@ class EarthquakeDatabase:
             conn.commit()
             return cursor.rowcount > 0
         except sqlite3.Error as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             logger.error(f"Error updating webhook last_sent_at: {e}")
             raise Exception(f"Error updating webhook last_sent_at: {e}")
 
@@ -537,6 +541,7 @@ class EarthquakeDatabase:
         Returns:
             True if successful, False if webhook not found
         """
+        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
@@ -549,7 +554,8 @@ class EarthquakeDatabase:
             conn.commit()
             return cursor.rowcount > 0
         except sqlite3.Error as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             logger.error(f"Error deleting webhook: {e}")
             raise Exception(f"Error deleting webhook: {e}")
 

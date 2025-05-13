@@ -88,6 +88,7 @@ async def send_notifications_to_webhooks(earthquake_data):
     Each webhook receives the same earthquake record at roughly the same time,
     with a 3-second delay between sending different records.
     """
+    db = None
     try:
         # Import necessary functions
         from database import EarthquakeDatabase
@@ -156,7 +157,8 @@ async def send_notifications_to_webhooks(earthquake_data):
     finally:
         # Close the database connection
         if 'db' in locals():
-            db.close()
+            if db is not None:
+                db.close()
 
 async def send_to_single_webhook(webhook_type, webhook_url, webhook_name, webhook_id, earthquake_data, db):
     """Helper function to send a single earthquake to a single webhook."""

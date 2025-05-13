@@ -1,7 +1,6 @@
 import json
 import requests
 from datetime import datetime
-from typing import Dict, Any, Optional, Union, List
 
 def discord(webhook_url, earthquake_data=None):
     """
@@ -34,7 +33,7 @@ def discord(webhook_url, earthquake_data=None):
             response = requests.post(webhook_url, data=json.dumps(payload), headers=headers)
 
             if response.status_code == 204:  # Discord returns 204 No Content on success
-                print(f"Successfully sent test message to Discord webhook")
+                print("Successfully sent test message to Discord webhook")
                 return True
             else:
                 print(f"Error sending to Discord webhook: {response.status_code} - {response.text}")
@@ -133,7 +132,7 @@ def zulip(webhook_url, earthquake_data=None):
             "text": content
         }
 
-        print(f"Sending test message to Zulip webhook")
+        print("Sending test message to Zulip webhook")
         return send_slack_format_message(webhook_url, payload)
 
     # Extract individual earthquake records if the data is in API response format
@@ -185,7 +184,7 @@ Data provided by Kandilli Observatory and Earthquake Research Institute"""
 def send_slack_format_message(webhook_url, payload):
     """Send a message to Zulip using Slack incoming webhook format."""
     try:
-        print(f"Sending to Zulip with Slack webhook format")
+        print("Sending to Zulip with Slack webhook format")
         print(f"Webhook URL: {webhook_url}")
         print(f"Payload: {payload}")
 
@@ -316,7 +315,7 @@ def send_whatsapp_message(webhook_url, message_body, recipient=None):
         )
 
         if response.status_code == 200:
-            print(f"Successfully sent to WhatsApp webhook")
+            print("Successfully sent to WhatsApp webhook")
             return True
         else:
             print(f"Error sending to WhatsApp webhook: {response.status_code} - {response.text}")
