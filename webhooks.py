@@ -344,7 +344,7 @@ def generic(webhook_url, earthquake_data=None):
         payload = test_data
     else:
         # Send the raw data
-        payload = earthquake_data
+        payload = earthquake_data["data"][0]
 
     # Send to the webhook
     try:

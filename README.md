@@ -78,13 +78,10 @@ python3 manage-webhooks.py <type> <url> <name>
 Discord,
 Zulip (slack_incoming),
 Generic
-```json
-{count: n, data:[{},{}] }
-```
 
-Each data object structured like
 ```json
 {
+  "id": 1,
   "timestamp": "2023-11-15T08:18:34Z",
   "date": "2023-11-15",
   "time": "08:18:34",
@@ -96,7 +93,11 @@ Each data object structured like
   "mw": null,
   "magnitude": 2.3,
   "location": "YEMISLI-SIMAV (KUTAHYA)",
-  "quality": "İlksel"
+  "quality": "İlksel",
+  "year": 2025,
+  "month": 5,
+  "day": 13,
+  "week": 20,
 }
 ```
 
