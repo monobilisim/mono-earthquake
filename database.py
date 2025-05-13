@@ -143,6 +143,16 @@ class EarthquakeDatabase:
 
         try:
             for eq in earthquakes:
+                # First check if the earthquake already exists to avoid consuming IDs
+                cursor.execute('''
+                SELECT id FROM earthquakes
+                WHERE timestamp = ? AND latitude = ? AND longitude = ?
+                ''', (eq["timestamp"], eq["latitude"], eq["longitude"]))
+
+                # If it exists, skip the insert attempt completely
+                if cursor.fetchone():
+                    continue
+
                 # Parse date to extract year, month, day
                 eq_date = datetime.strptime(eq["date"], "%Y-%m-%d")
                 year, month, day = eq_date.year, eq_date.month, eq_date.day
@@ -150,44 +160,38 @@ class EarthquakeDatabase:
                 # Get week number
                 _, week, _ = eq_date.isocalendar()
 
-                try:
-                    cursor.execute('''
-                    INSERT OR IGNORE INTO earthquakes
-                    (timestamp, date, time, latitude, longitude, depth, md, ml, mw, magnitude,
-                    location, quality, year, month, day, week)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (
-                        eq["timestamp"],
-                        eq["date"],
-                        eq["time"],
-                        eq["latitude"],
-                        eq["longitude"],
-                        eq["depth"],
-                        eq["md"],
-                        eq["ml"],
-                        eq["mw"],
-                        eq["magnitude"],
-                        eq["location"],
-                        eq["quality"],
-                        year,
-                        month,
-                        day,
-                        week
-                    ))
+                cursor.execute('''
+                INSERT INTO earthquakes
+                (timestamp, date, time, latitude, longitude, depth, md, ml, mw, magnitude,
+                location, quality, year, month, day, week)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    eq["timestamp"],
+                    eq["date"],
+                    eq["time"],
+                    eq["latitude"],
+                    eq["longitude"],
+                    eq["depth"],
+                    eq["md"],
+                    eq["ml"],
+                    eq["mw"],
+                    eq["magnitude"],
+                    eq["location"],
+                    eq["quality"],
+                    year,
+                    month,
+                    day,
+                    week
+                ))
 
-                    if cursor.rowcount > 0:
-                        inserted += 1
-                except sqlite3.IntegrityError:
-                    # Skip duplicates
-                    pass
+                inserted += cursor.rowcount
 
             conn.commit()
+            return inserted
         except sqlite3.Error as e:
             conn.rollback()
             logger.error(f"Error inserting earthquake data: {e}")
             raise Exception(f"Error inserting earthquake data: {e}")
-
-        return inserted
 
     def get_latest_earthquakes(self, limit: int = 1000) -> List[Dict[str, Any]]:
         """

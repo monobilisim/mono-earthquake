@@ -11,6 +11,7 @@ import calendar
 from parser import KoeriParser
 from typing import Optional
 from load_dotenv import load_dotenv
+from webhooks import discord, zulip, whatsapp, generic
 
 load_dotenv()
 
@@ -29,7 +30,6 @@ app = FastAPI(
     version="1.1.0",
 )
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,7 +38,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize the parser
 parser = None
 
 def get_parser():
@@ -84,11 +83,15 @@ async def refresh_earthquake_data():
         }
 
 async def send_notifications_to_webhooks(earthquake_data):
-    """Send notifications to all registered webhooks."""
+    """
+    Send notifications to all registered webhooks.
+    Each webhook receives the same earthquake record at roughly the same time,
+    with a 3-second delay between sending different records.
+    """
     try:
         # Import necessary functions
         from database import EarthquakeDatabase
-        from webhooks import discord, zulip, whatsapp, generic
+
 
         # Create a direct database connection for this function
         db = EarthquakeDatabase()
@@ -100,35 +103,53 @@ async def send_notifications_to_webhooks(earthquake_data):
             logger.info("No webhooks registered to receive notifications")
             return
 
-        logger.info(f"Sending earthquake data to {len(webhooks)} webhooks")
+        # Extract earthquake records
+        earthquakes = earthquake_data.get("data", [])
+        if not earthquakes:
+            logger.info("No earthquake data to send")
+            return
 
-        # Process each webhook
-        for webhook in webhooks:
-            webhook_type = webhook['type']
-            webhook_url = webhook['url']
-            webhook_name = webhook['name']
+        logger.info(f"Sending {len(earthquakes)} earthquake records to {len(webhooks)} webhooks")
 
-            logger.info(f"Sending to webhook '{webhook_name}' of type '{webhook_type}'")
+        # Process each earthquake record
+        for i, earthquake in enumerate(earthquakes):
+            # Create a single-earthquake data package
+            single_quake_data = {
+                "count": 1,
+                "data": [earthquake]
+            }
 
-            try:
-                success = False
-                if webhook_type == 'discord':
-                    success = discord(webhook_url, earthquake_data)
-                elif webhook_type == 'zulip':
-                    success = zulip(webhook_url, earthquake_data)
-                elif webhook_type == 'whatsapp':
-                    success = whatsapp(webhook_url, earthquake_data)
-                elif webhook_type == 'generic':
-                    success = generic(webhook_url, earthquake_data)
+            logger.info(f"Distributing earthquake record {i+1}/{len(earthquakes)} to all webhooks")
 
-                if success:
-                    # Update last_sent_at timestamp
-                    db.update_webhook_last_sent(webhook['id'])
-                    logger.info(f"Successfully sent earthquake data to '{webhook_name}'")
-                else:
-                    logger.warning(f"Failed to send earthquake data to '{webhook_name}'")
-            except Exception as e:
-                logger.error(f"Error sending to webhook '{webhook_name}': {str(e)}")
+            # Create tasks for sending this earthquake record to all webhooks
+            tasks = []
+
+            # Prepare a task for each webhook
+            for webhook in webhooks:
+                webhook_type = webhook['type']
+                webhook_url = webhook['url']
+                webhook_name = webhook['name']
+
+                # Create a task (but don't await it yet)
+                task = send_to_single_webhook(
+                    webhook_type=webhook_type,
+                    webhook_url=webhook_url,
+                    webhook_name=webhook_name,
+                    webhook_id=webhook['id'],
+                    earthquake_data=single_quake_data,
+                    db=db
+                )
+                tasks.append(task)
+
+            # Now execute all tasks concurrently
+            if tasks:
+                await asyncio.gather(*tasks)
+                logger.info(f"Finished sending earthquake record {i+1} to all webhooks")
+
+            # Add a delay before sending the next record (except for the last one)
+            if i < len(earthquakes) - 1:
+                logger.info("Waiting 5 seconds before sending next record...")
+                await asyncio.sleep(3)  # 5-second delay between records
 
     except Exception as e:
         logger.error(f"Error sending notifications to webhooks: {str(e)}")
@@ -136,6 +157,34 @@ async def send_notifications_to_webhooks(earthquake_data):
         # Close the database connection
         if 'db' in locals():
             db.close()
+
+async def send_to_single_webhook(webhook_type, webhook_url, webhook_name, webhook_id, earthquake_data, db):
+    """Helper function to send a single earthquake to a single webhook."""
+    try:
+        logger.info(f"Sending earthquake to webhook '{webhook_name}' of type '{webhook_type}'")
+
+        success = False
+        if webhook_type == 'discord':
+            success = discord(webhook_url, earthquake_data)
+        elif webhook_type == 'zulip':
+            success = zulip(webhook_url, earthquake_data)
+        elif webhook_type == 'whatsapp':
+            success = whatsapp(webhook_url, earthquake_data)
+        elif webhook_type == 'generic':
+            success = generic(webhook_url, earthquake_data)
+
+        if success:
+            # Update the last_sent_at timestamp
+            db.update_webhook_last_sent(webhook_id)
+            logger.info(f"Successfully sent earthquake data to '{webhook_name}'")
+        else:
+            logger.warning(f"Failed to send earthquake data to '{webhook_name}'")
+
+        return success
+    except Exception as e:
+        logger.error(f"Error sending to webhook '{webhook_name}': {str(e)}")
+        return False
+
 
 async def polling_service():
     """Background service that polls for new data at regular intervals"""

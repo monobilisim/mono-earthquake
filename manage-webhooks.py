@@ -8,7 +8,7 @@ from webhooks import discord, zulip, whatsapp, generic
 
 # Define valid webhook types
 VALID_WEBHOOK_TYPES = [
-    "whatsapp",
+    # "whatsapp", # i did not test it, counted as not implemented
     "zulip",
     "discord",
     "generic" # just sends the json object looks like {count: n, data: [{}, {}]}
