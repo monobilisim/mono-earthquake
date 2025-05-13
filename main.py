@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title="KOERI Earthquake Data API",
     description="API for accessing earthquake data from the Kandilli Observatory and Earthquake Research Institute (KOERI)",
-    version="1.1.0",
+    version="1.2.0",
 )
 
 app.add_middleware(
@@ -221,7 +221,7 @@ async def root():
     """Root endpoint providing API information"""
     return {
         "name": "KOERI Earthquake Data API",
-        "version": "1.1.3",
+        "version": "1.2.0",
         "description": "API for accessing earthquake data from Kandilli Observatory and Earthquake Research Institute",
         "database": "SQLite",
         "endpoints": {
