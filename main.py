@@ -54,6 +54,22 @@ async def refresh_earthquake_data():
         earthquakes = parser.get_earthquakes()
         new_records = parser.save_to_database(earthquakes)
         logger.info(f"Data refreshed automatically: {len(earthquakes)} fetched, {new_records} new records")
+
+        # If there are new records, send notifications to webhooks
+        if new_records > 0:
+            # Get the latest earthquakes that were just added
+            latest_earthquakes = parser.get_latest_earthquakes(new_records)
+
+            # Format the data as the API would return it
+            earthquake_data = {
+                "count": len(latest_earthquakes),
+                "data": latest_earthquakes
+            }
+
+            # Send notifications to all registered webhooks
+            await send_notifications_to_webhooks(earthquake_data)
+            logger.info("Sent earthquake notifications to webhooks")
+
         return {
             "status": "success",
             "message": "Data refreshed successfully",
@@ -66,6 +82,60 @@ async def refresh_earthquake_data():
             "status": "error",
             "message": f"Failed to refresh data: {str(e)}",
         }
+
+async def send_notifications_to_webhooks(earthquake_data):
+    """Send notifications to all registered webhooks."""
+    try:
+        # Import necessary functions
+        from database import EarthquakeDatabase
+        from webhooks import discord, zulip, whatsapp, generic
+
+        # Create a direct database connection for this function
+        db = EarthquakeDatabase()
+
+        # Get all webhooks
+        webhooks = db.get_webhooks()
+
+        if not webhooks:
+            logger.info("No webhooks registered to receive notifications")
+            return
+
+        logger.info(f"Sending earthquake data to {len(webhooks)} webhooks")
+
+        # Process each webhook
+        for webhook in webhooks:
+            webhook_type = webhook['type']
+            webhook_url = webhook['url']
+            webhook_name = webhook['name']
+
+            logger.info(f"Sending to webhook '{webhook_name}' of type '{webhook_type}'")
+
+            try:
+                success = False
+                if webhook_type == 'discord':
+                    success = discord(webhook_url, earthquake_data)
+                elif webhook_type == 'zulip':
+                    success = zulip(webhook_url, earthquake_data)
+                elif webhook_type == 'whatsapp':
+                    success = whatsapp(webhook_url, earthquake_data)
+                elif webhook_type == 'generic':
+                    success = generic(webhook_url, earthquake_data)
+
+                if success:
+                    # Update last_sent_at timestamp
+                    db.update_webhook_last_sent(webhook['id'])
+                    logger.info(f"Successfully sent earthquake data to '{webhook_name}'")
+                else:
+                    logger.warning(f"Failed to send earthquake data to '{webhook_name}'")
+            except Exception as e:
+                logger.error(f"Error sending to webhook '{webhook_name}': {str(e)}")
+
+    except Exception as e:
+        logger.error(f"Error sending notifications to webhooks: {str(e)}")
+    finally:
+        # Close the database connection
+        if 'db' in locals():
+            db.close()
 
 async def polling_service():
     """Background service that polls for new data at regular intervals"""
