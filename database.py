@@ -102,6 +102,23 @@ class EarthquakeDatabase:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_earthquakes_year_month ON earthquakes(year, month)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_earthquakes_year_week ON earthquakes(year, week)')
 
+            # Create webhooks table
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS webhooks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(255) NOT NULL,
+                url TEXT NOT NULL,
+                type VARCHAR(255) NOT NULL,
+                last_sent_at DATETIME,
+                created_at TEXT NOT NULL,
+                UNIQUE(url),
+                UNIQUE(name)
+            )
+            ''')
+
+            # Create index on webhook name for faster queries
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_webhooks_name ON webhooks(name)')
+
             conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Error initializing database schema: {e}")
@@ -397,6 +414,140 @@ class EarthquakeDatabase:
         except sqlite3.Error as e:
             logger.error(f"Error searching earthquakes: {e}")
             raise Exception(f"Error searching earthquakes: {e}")
+
+    def register_webhook(self, name: str, url: str) -> int:
+        """
+        Register a new webhook.
+
+        Args:
+            name: Webhook name
+            url: Webhook URL
+            type: Webhook type
+
+        Returns:
+            ID of the newly created webhook
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Get current timestamp in ISO format
+            now = datetime.now().isoformat()
+
+            cursor.execute('''
+            INSERT OR REPLACE INTO webhooks
+            (name, url, created_at)
+            VALUES (?, ?, ?)
+            ''', (name, url, now))
+
+            conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            conn.rollback()
+            logger.error(f"Error registering webhook: {e}")
+            raise Exception(f"Error registering webhook: {e}")
+
+    def update_webhook_last_sent(self, webhook_id: int) -> bool:
+        """
+        Update the last_sent_at timestamp for a webhook.
+
+        Args:
+            webhook_id: ID of the webhook to update
+
+        Returns:
+            True if successful, False if webhook not found
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Get current timestamp in ISO format
+            now = datetime.now().isoformat()
+
+            cursor.execute('''
+            UPDATE webhooks
+            SET last_sent_at = ?
+            WHERE id = ?
+            ''', (now, webhook_id))
+
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            conn.rollback()
+            logger.error(f"Error updating webhook last_sent_at: {e}")
+            raise Exception(f"Error updating webhook last_sent_at: {e}")
+
+    def get_webhook(self, webhook_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get webhook by ID.
+
+        Args:
+            webhook_id: ID of the webhook to retrieve
+
+        Returns:
+            Dictionary containing webhook data or None if not found
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            SELECT * FROM webhooks
+            WHERE id = ?
+            ''', (webhook_id,))
+
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving webhook: {e}")
+            raise Exception(f"Error retrieving webhook: {e}")
+
+    def get_webhooks(self) -> List[Dict[str, Any]]:
+        """
+        Get all registered webhooks.
+
+        Returns:
+            List of dictionaries containing webhook data
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            SELECT * FROM webhooks
+            ORDER BY name ASC
+            ''')
+
+            return [dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logger.error(f"Error retrieving webhooks: {e}")
+            raise Exception(f"Error retrieving webhooks: {e}")
+
+    def delete_webhook(self, webhook_id: int) -> bool:
+        """
+        Delete a webhook by ID.
+
+        Args:
+            webhook_id: ID of the webhook to delete
+
+        Returns:
+            True if successful, False if webhook not found
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            DELETE FROM webhooks
+            WHERE id = ?
+            ''', (webhook_id,))
+
+            conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            conn.rollback()
+            logger.error(f"Error deleting webhook: {e}")
+            raise Exception(f"Error deleting webhook: {e}")
 
     def close(self):
         """Close the database connection for the current thread."""
