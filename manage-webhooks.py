@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+from database import EarthquakeDatabase
 
 from webhooks import discord, zulip, whatsapp, generic
 
@@ -14,46 +14,6 @@ VALID_WEBHOOK_TYPES = [
     "generic" # just sends the json object looks like {count: n, data: [{}, {}]}
 ]
 
-# Database path
-DB_PATH = "./data/earthquakes.db"
-
-def ensure_webhooks_table(conn):
-    """Ensure the webhooks table exists in the database."""
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS webhooks (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name VARCHAR(255) NOT NULL,
-        url TEXT NOT NULL,
-        type VARCHAR(255) NOT NULL,
-        last_sent_at DATETIME,
-        created_at TEXT NOT NULL,
-        UNIQUE(url),
-        UNIQUE(name)
-    )
-    ''')
-
-    # Create index on webhook name for faster queries
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_webhooks_name ON webhooks(name)')
-    conn.commit()
-
-def connect_db():
-    """Connect to the SQLite database and ensure the webhook table exists."""
-    try:
-        # Ensure the directory exists
-        Path(DB_PATH).parent.mkdir(exist_ok=True, parents=True)
-
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row  # Return rows as dictionaries
-
-        # Ensure table exists
-        ensure_webhooks_table(conn)
-
-        return conn
-    except sqlite3.Error as e:
-        print(f"Error connecting to database: {e}", file=sys.stderr)
-        sys.exit(1)
-
 def add_webhook(webhook_type, url, name):
     """Add a new webhook to the database."""
     if webhook_type not in VALID_WEBHOOK_TYPES:
@@ -61,134 +21,122 @@ def add_webhook(webhook_type, url, name):
         print(f"Valid types are: {', '.join(VALID_WEBHOOK_TYPES)}")
         sys.exit(1)
 
-    conn = connect_db()
+    db = EarthquakeDatabase()
     try:
-        cursor = conn.cursor()
-        now = datetime.now().isoformat()
-
-        cursor.execute('''
-        INSERT INTO webhooks (name, url, type, created_at)
-        VALUES (?, ?, ?, ?)
-        ''', (name, url, webhook_type, now))
-
-        conn.commit()
-        print(f"Successfully added webhook '{name}' of type '{webhook_type}'")
-    except sqlite3.IntegrityError:
-        print(f"Error: A webhook with name '{name}' or URL '{url}' already exists")
-        sys.exit(1)
-    except sqlite3.Error as e:
+        webhook_id = db.register_webhook(name, url, webhook_type)
+        print(f"Successfully added webhook '{name}' with ID {webhook_id}")
+    except Exception as e:
         print(f"Error adding webhook: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
-        conn.close()
+        db.close()
 
 def remove_webhook(name):
     """Remove a webhook from the database by name."""
-    conn = connect_db()
+    db = EarthquakeDatabase()
     try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT id FROM webhooks WHERE name = ?', (name,))
-        webhook = cursor.fetchone()
+        # First find the webhook by name
+        webhooks = db.get_webhooks()
+        webhook_to_delete = None
+        for webhook in webhooks:
+            if webhook['name'] == name:
+                webhook_to_delete = webhook
+                break
 
-        if not webhook:
+        if not webhook_to_delete:
             print(f"Error: No webhook found with name '{name}'")
             sys.exit(1)
 
-        cursor.execute('DELETE FROM webhooks WHERE name = ?', (name,))
-        conn.commit()
-        print(f"Successfully removed webhook '{name}'")
-    except sqlite3.Error as e:
+        if db.delete_webhook(webhook_to_delete['id']):
+            print(f"Successfully removed webhook '{name}'")
+        else:
+            print(f"Error: Failed to remove webhook '{name}'")
+            sys.exit(1)
+    except Exception as e:
         print(f"Error removing webhook: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
-        conn.close()
+        db.close()
 
 def list_webhooks(webhook_type=None):
     """List webhooks, optionally filtered by type."""
-    conn = connect_db()
+    db = EarthquakeDatabase()
     try:
-        cursor = conn.cursor()
+        if webhook_type and webhook_type not in VALID_WEBHOOK_TYPES:
+            print(f"Error: Invalid webhook type '{webhook_type}'")
+            print(f"Valid types are: {', '.join(VALID_WEBHOOK_TYPES)}")
+            sys.exit(1)
+
+        webhooks = db.get_webhooks()
 
         if webhook_type:
-            if webhook_type not in VALID_WEBHOOK_TYPES:
-                print(f"Error: Invalid webhook type '{webhook_type}'")
-                print(f"Valid types are: {', '.join(VALID_WEBHOOK_TYPES)}")
-                sys.exit(1)
-
-            cursor.execute('''
-            SELECT id, name, url, type, last_sent_at, created_at
-            FROM webhooks
-            WHERE type = ?
-            ORDER BY name
-            ''', (webhook_type,))
-        else:
-            cursor.execute('''
-            SELECT id, name, url, type, last_sent_at, created_at
-            FROM webhooks
-            ORDER BY name
-            ''')
-
-        webhooks = cursor.fetchall()
+            webhooks = [w for w in webhooks if w.get('type') == webhook_type]
 
         if not webhooks:
             message = f"No webhooks found of type '{webhook_type}'" if webhook_type else "No webhooks found"
             print(message)
             return
 
-        # Print table header
         if webhook_type:
-            # If type is provided, omit the Type column
             print(f"{'ID':<5} {'Name':<20} {'Last Sent':<30} {'URL':<50}")
             print("-" * 100)
 
             for webhook in webhooks:
-                last_sent = webhook['last_sent_at'] or "Never"
+                last_sent = webhook.get('last_sent_at', 'Never') or "Never"
+                if last_sent and last_sent != 'Never':
+                    try:
+                        last_sent_dt = datetime.fromisoformat(last_sent)
+                        last_sent = last_sent_dt.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        pass
                 print(f"{webhook['id']:<5} {webhook['name']:<20} {last_sent:<30} {webhook['url']:<50}")
         else:
-            # If no type is provided, show all columns including Type
             print(f"{'ID':<5} {'Name':<20} {'Type':<10} {'Last Sent':<30} {'URL':<50}")
             print("-" * 110)
 
             for webhook in webhooks:
-                last_sent = webhook['last_sent_at'] or "Never"
+                last_sent = webhook.get('last_sent_at', 'Never') or "Never"
+                if last_sent and last_sent != 'Never':
+                    try:
+                        last_sent_dt = datetime.fromisoformat(last_sent)
+                        last_sent = last_sent_dt.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        pass
                 print(f"{webhook['id']:<5} {webhook['name']:<20} {webhook['type']:<10} {last_sent:<30} {webhook['url']:<50}")
 
-    except sqlite3.Error as e:
+    except Exception as e:
         print(f"Error listing webhooks: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
-        conn.close()
+        db.close()
 
 def fetch_latest_earthquake():
     """Fetch the latest earthquake data from the database."""
-    conn = connect_db()
+    db = EarthquakeDatabase()
     try:
-        cursor = conn.cursor()
-        cursor.execute('''
-        SELECT * FROM earthquakes
-        ORDER BY timestamp DESC
-        LIMIT 1
-        ''')
-
-        earthquake = cursor.fetchone()
-        if not earthquake:
+        earthquakes = db.get_latest_earthquakes(limit=1)
+        if earthquakes:
+            return earthquakes[0]
+        else:
             print("No earthquake data found in the database.")
             return None
-
-        return dict(earthquake)
-    except sqlite3.Error as e:
+    except Exception as e:
         print(f"Error fetching latest earthquake data: {e}", file=sys.stderr)
         return None
     finally:
-        conn.close()
+        db.close()
 
 def test_webhook(name):
     """Test a webhook by sending a test message."""
-    conn = connect_db()
+    db = EarthquakeDatabase()
     try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM webhooks WHERE name = ?', (name,))
-        webhook = cursor.fetchone()
+        # Find webhook by name
+        webhooks = db.get_webhooks()
+        webhook = None
+        for w in webhooks:
+            if w['name'] == name:
+                webhook = w
+                break
 
         if not webhook:
             print(f"Error: No webhook found with name '{name}'")
@@ -234,18 +182,16 @@ def test_webhook(name):
 
         if success:
             # Update last_sent_at timestamp
-            now = datetime.now().isoformat()
-            cursor.execute('UPDATE webhooks SET last_sent_at = ? WHERE name = ?', (now, name))
-            conn.commit()
+            db.update_webhook_last_sent(webhook['id'])
             print("Webhook test successful! Updated last sent timestamp.")
         else:
             print("Test webhook failed. Please check URL and network connection.")
 
-    except sqlite3.Error as e:
+    except Exception as e:
         print(f"Error testing webhook: {e}", file=sys.stderr)
         sys.exit(1)
     finally:
-        conn.close()
+        db.close()
 
 def send_latest_earthquake(name=None):
     """Send the latest earthquake data to a webhook or all webhooks if name is None."""
@@ -260,38 +206,40 @@ def send_latest_earthquake(name=None):
         "data": [latest_earthquake]
     }
 
-    conn = connect_db()
+    db = EarthquakeDatabase()
     try:
-        cursor = conn.cursor()
         if name:
             # Send to a specific webhook
-            cursor.execute('SELECT * FROM webhooks WHERE name = ?', (name,))
-            webhook = cursor.fetchone()
+            webhooks = db.get_webhooks()
+            webhook = None
+            for w in webhooks:
+                if w['name'] == name:
+                    webhook = w
+                    break
 
             if not webhook:
                 print(f"Error: No webhook found with name '{name}'")
                 sys.exit(1)
 
-            process_webhook_send(webhook, earthquake_data, cursor, conn)
+            process_webhook_send(webhook, earthquake_data, db)
         else:
             # Send to all webhooks
-            cursor.execute('SELECT * FROM webhooks')
-            webhooks = cursor.fetchall()
+            webhooks = db.get_webhooks()
 
             if not webhooks:
                 print("No webhooks found.")
                 sys.exit(1)
 
             for webhook in webhooks:
-                process_webhook_send(webhook, earthquake_data, cursor, conn)
+                process_webhook_send(webhook, earthquake_data, db)
 
-    except sqlite3.Error as e:
+    except Exception as e:
         print(f"Error sending earthquake data to webhook(s): {e}", file=sys.stderr)
         sys.exit(1)
     finally:
-        conn.close()
+        db.close()
 
-def process_webhook_send(webhook, earthquake_data, cursor, conn):
+def process_webhook_send(webhook, earthquake_data, db):
     """Process sending earthquake data to a single webhook."""
     webhook_type = webhook['type']
     webhook_url = webhook['url']
@@ -314,9 +262,7 @@ def process_webhook_send(webhook, earthquake_data, cursor, conn):
 
     if success:
         # Update last_sent_at timestamp
-        now = datetime.now().isoformat()
-        cursor.execute('UPDATE webhooks SET last_sent_at = ? WHERE name = ?', (now, webhook_name))
-        conn.commit()
+        db.update_webhook_last_sent(webhook['id'])
         print(f"Successfully sent latest earthquake data to '{webhook_name}'")
     else:
         print(f"Failed to send earthquake data to '{webhook_name}'")
@@ -332,9 +278,15 @@ def show_help():
     print("  list <type>                    - List webhooks of a specific type")
     print("  test <name>                    - Test a webhook by sending a test message")
     print("  send <name>                    - Send latest earthquake data to a specific webhook")
+    print("  send                           - Send latest earthquake data to all webhooks")
+    print("  remove-last-earthquake         - Remove the last earthquake from the database")
     print("\nValid webhook types:")
     for t in VALID_WEBHOOK_TYPES:
         print(f"  - {t}")
+    print("\nExamples:")
+    print("  python manage-webhooks.py add discord https://discord.com/api/webhooks/... my-discord")
+    print("  python manage-webhooks.py test my-discord")
+    print("  python manage-webhooks.py send my-discord")
 
 def main():
     """Parse arguments and dispatch to appropriate function."""
@@ -367,9 +319,29 @@ def main():
         name = sys.argv[2]
         test_webhook(name)
 
-    elif command == "send" and len(sys.argv) == 3:
-        name = sys.argv[2]
-        send_latest_earthquake(name)
+    elif command == "send":
+        if len(sys.argv) == 3:
+            name = sys.argv[2]
+            send_latest_earthquake(name)
+        elif len(sys.argv) == 2:
+            send_latest_earthquake()
+        else:
+            show_help()
+
+    elif command == "remove-last-earthquake":
+        db = None
+
+        try:
+            db = EarthquakeDatabase()
+
+            db.delete_last_earthquake()
+        except Exception as e:
+            print(f"Error removing last earthquake: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        finally:
+            if db:
+                db.close()
 
     else:
         print("Error: Invalid command or arguments")

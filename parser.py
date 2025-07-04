@@ -15,13 +15,15 @@ class KoeriParser:
     Fetches and parses earthquake data, saving it in SQLite database.
     """
 
-    def __init__(self, db_path: str = "data/earthquakes.db"):
+    def __init__(self, db_path: Optional[str] = None):
         """
         Initialize the parser with a database file path.
 
         Args:
             db_path: Path to the SQLite database file
         """
+        if db_path is None:
+            db_path = given_db_path or "data/earthquakes.db"
 
         self.db = EarthquakeDatabase(db_path)
 
@@ -280,7 +282,7 @@ class KoeriParser:
             max_magnitude=max_magnitude,
             start_date=start_date,
             end_date=end_date,
-            location_keyword=location_keyword,
+            location=location_keyword,
             limit=limit
         )
 
@@ -295,11 +297,15 @@ class KoeriParser:
 
     def close(self):
         """Close the database connection."""
-        self.db.close()
+        if hasattr(self.db, 'close'):
+            self.db.close()
 
     def __del__(self):
         """Destructor to ensure database connection is closed."""
-        self.close()
+        try:
+            self.close()
+        except:
+            pass
 
 if __name__ == "__main__":
     # Example usage

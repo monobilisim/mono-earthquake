@@ -1,6 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, PlainTextResponse
 import base64
 import uvicorn
 import asyncio
@@ -12,6 +12,8 @@ from parser import KoeriParser
 from typing import Optional
 from load_dotenv import load_dotenv
 from webhooks import discord, zulip, whatsapp, generic
+from polls_processor import process_whatsapp_webhook, get_template_statistics, is_polls_related_webhook
+from polls import send_wa_template
 
 load_dotenv()
 
@@ -54,20 +56,37 @@ async def refresh_earthquake_data():
         new_records = parser.save_to_database(earthquakes)
         logger.info(f"Data refreshed automatically: {len(earthquakes)} fetched, {new_records} new records")
 
-        # If there are new records, send notifications to webhooks
         if new_records > 0:
-            # Get the latest earthquakes that were just added
             latest_earthquakes = parser.get_latest_earthquakes(new_records)
 
-            # Format the data as the API would return it
             earthquake_data = {
                 "count": len(latest_earthquakes),
                 "data": latest_earthquakes
             }
 
-            # Send notifications to all registered webhooks
             await send_notifications_to_webhooks(earthquake_data)
-            logger.info("Sent earthquake notifications to webhooks")
+
+            db = None
+            try:
+                from database import EarthquakeDatabase
+
+                db = EarthquakeDatabase()
+
+                polls = db.get_polls()
+
+                for poll in polls:
+                    poll_name = poll["name"]
+                    poll_type = poll["type"]
+
+                    if poll_type == "whatsapp":
+                        logger.info(f"Sending WhatsApp notification for poll: {poll_name}")
+                        send_wa_template(poll_name, earthquake_data)
+
+            except Exception as e:
+                logger.error(f"Error sending notifications for polls: {str(e)}")
+            finally:
+                if db:
+                    db.close()
 
         return {
             "status": "success",
@@ -92,7 +111,6 @@ async def send_notifications_to_webhooks(earthquake_data):
     try:
         # Import necessary functions
         from database import EarthquakeDatabase
-
 
         # Create a direct database connection for this function
         db = EarthquakeDatabase()
@@ -142,12 +160,10 @@ async def send_notifications_to_webhooks(earthquake_data):
                 )
                 tasks.append(task)
 
-            # Now execute all tasks concurrently
             if tasks:
                 await asyncio.gather(*tasks)
                 logger.info(f"Finished sending earthquake record {i+1} to all webhooks")
 
-            # Add a delay before sending the next record (except for the last one)
             if i < len(earthquakes) - 1:
                 logger.info("Waiting 5 seconds before sending next record...")
                 await asyncio.sleep(3)  # 5-second delay between records
@@ -155,7 +171,6 @@ async def send_notifications_to_webhooks(earthquake_data):
     except Exception as e:
         logger.error(f"Error sending notifications to webhooks: {str(e)}")
     finally:
-        # Close the database connection
         if 'db' in locals():
             if db is not None:
                 db.close()
@@ -187,7 +202,6 @@ async def send_to_single_webhook(webhook_type, webhook_url, webhook_name, webhoo
         logger.error(f"Error sending to webhook '{webhook_name}': {str(e)}")
         return False
 
-
 async def polling_service():
     """Background service that polls for new data at regular intervals"""
     # Get interval from environment variable (in seconds)
@@ -214,7 +228,34 @@ async def startup_event():
     """Start the polling service when the application starts"""
     global polling_task
     polling_task = asyncio.create_task(polling_service())
-    logger.info("Earthquake data polling service started")
+
+@app.get("/wa-callback", tags=["Webhooks"])
+async def wa_callbackGet(request: Request):
+    params = dict(request.query_params)
+    mode = params.get("hub.mode")
+    token = params.get("hub.verify_token")
+    challenge = params.get("hub.challenge")
+
+    if mode == "subscribe" and token == str(os.getenv("WA_VERIFY_TOKEN")):
+        return PlainTextResponse(content=challenge, status_code=200)
+    return PlainTextResponse(content="Forbidden", status_code=403)
+
+@app.post("/wa-callback", tags=["Webhooks"])
+async def wa_callbackPost(request: Request):
+    """Webhook endpoint for WhatsApp callback"""
+    data = await request.json()
+    print(f"Received WhatsApp callback: {data}")
+    logger.info(f"Received WhatsApp webhook callback {data}")
+
+    if is_polls_related_webhook(data):
+        logger.info("Processing WhatsApp webhook for polls/flows")
+        success = process_whatsapp_webhook(data)
+        if not success:
+            logger.error("Failed to process WhatsApp polls webhook")
+    else:
+        logger.info("WhatsApp webhook not related to polls - standard processing")
+
+    return Response(status_code=200)
 
 @app.get("/", tags=["Info"])
 async def root():

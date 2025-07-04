@@ -114,7 +114,7 @@ def send_single_earthquake(webhook_url, earthquake):
 
 def zulip(webhook_url, earthquake_data=None):
     """
-    Send earthquake data to a Zulip webhook using the Slack incoming webhook format.
+    Send earthquake data to a   using the Slack incoming webhook format.
 
     Args:
         webhook_url: The Zulip webhook URL (includes stream and topic in query parameters)
@@ -184,27 +184,11 @@ Data provided by Kandilli Observatory and Earthquake Research Institute"""
 def send_slack_format_message(webhook_url, payload):
     """Send a message to Zulip using Slack incoming webhook format."""
     try:
-        print("Sending to Zulip with Slack webhook format")
-        print(f"Webhook URL: {webhook_url}")
-        print(f"Payload: {payload}")
-
         headers = {"Content-Type": "application/json"}
         response = requests.post(webhook_url, json=payload, headers=headers)
 
-        print(f"Response status: {response.status_code}")
-        print(f"Response content: {response.text[:200]}")
-
         # Check response
-        if 200 <= response.status_code < 300:
-            print(f"Successfully sent to Zulip webhook (status {response.status_code})")
-
-            # Try to parse the response JSON
-            try:
-                result = response.json()
-                print(f"Response JSON: {result}")
-            except:
-                print(f"Response is not JSON: {response.text[:100]}")
-
+        if response.status_code == 200:
             return True
         else:
             print(f"Error sending to Zulip webhook: {response.status_code} - {response.text}")

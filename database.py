@@ -39,27 +39,23 @@ class EarthquakeDatabase:
 
     def _get_connection(self):
         """
-        Get a thread-specific database connection.
-        Creates a new connection if none exists for the current thread.
+        Get a database connection for the current thread.
 
         Returns:
-            SQLite connection object
+            sqlite3.Connection: Database connection
         """
-        # Check if we already have a connection for this thread
         if not hasattr(self._thread_local, "conn"):
             try:
-                # Create a new connection for this thread
-                conn = sqlite3.connect(self._db_path)
-                # Enable foreign keys
-                conn.execute("PRAGMA foreign_keys = ON")
-                # Return row results as dictionaries
-                conn.row_factory = sqlite3.Row
-                # Store connection in thread-local storage
-                self._thread_local.conn = conn
+                self._thread_local.conn = sqlite3.connect(
+                    self._db_path,
+                    check_same_thread=False,
+                    timeout=30.0
+                )
+                self._thread_local.conn.row_factory = sqlite3.Row
                 logger.debug(f"Created new database connection in thread {threading.get_ident()}")
             except sqlite3.Error as e:
                 logger.error(f"Error creating database connection: {e}")
-                raise Exception(f"Error connecting to database: {e}")
+                raise Exception(f"Error creating database connection: {e}")
 
         return self._thread_local.conn
 
@@ -119,6 +115,32 @@ class EarthquakeDatabase:
             # Create index on webhook name for faster queries
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_webhooks_name ON webhooks(name)')
 
+            # Create polls table
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS polls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(255) NOT NULL UNIQUE,
+                type VARCHAR(255) NOT NULL,
+                min_magnitude REAL DEFAULT 1.7,
+                created_at TEXT NOT NULL
+            )
+            ''')
+
+            # Create wa_users table
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS wa_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(255) NOT NULL,
+                phone_number VARCHAR(20) NOT NULL UNIQUE,
+                last_sent_at DATETIME,
+                created_at TEXT NOT NULL
+            )
+            ''')
+
+            # Create indexes for polls tables
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_polls_name ON polls(name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_wa_users_phone ON wa_users(phone_number)')
+
             conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Error initializing database schema: {e}")
@@ -126,267 +148,285 @@ class EarthquakeDatabase:
 
     def insert_earthquakes(self, earthquakes: List[Dict[str, Any]]) -> int:
         """
-        Insert multiple earthquake records into the database.
+        Insert multiple earthquakes into the database.
 
         Args:
-            earthquakes: List of earthquake records to insert
+            earthquakes: List of earthquake dictionaries
 
         Returns:
-            Number of records inserted
+            Number of earthquakes inserted
         """
         if not earthquakes:
             return 0
 
-        conn = self._get_connection()
-        cursor = conn.cursor()
-        inserted = 0
-
         try:
-            for eq in earthquakes:
-                # First check if the earthquake already exists to avoid consuming IDs
-                cursor.execute('''
-                SELECT id FROM earthquakes
-                WHERE timestamp = ? AND latitude = ? AND longitude = ?
-                ''', (eq["timestamp"], eq["latitude"], eq["longitude"]))
+            conn = self._get_connection()
+            cursor = conn.cursor()
 
-                # If it exists, skip the insert attempt completely
-                if cursor.fetchone():
+            inserted_count = 0
+            for earthquake in earthquakes:
+                try:
+                    # Parse timestamp to extract date components
+                    timestamp = datetime.fromisoformat(earthquake['timestamp'].replace('Z', '+00:00'))
+                    year = timestamp.year
+                    month = timestamp.month
+                    day = timestamp.day
+                    week = timestamp.isocalendar()[1]
+
+                    cursor.execute('SELECT 1 FROM earthquakes WHERE timestamp = ?', (earthquake['timestamp'],))
+                    if cursor.fetchone():
+                        continue
+
+                    cursor.execute('''
+                    INSERT OR IGNORE INTO earthquakes (
+                        timestamp, date, time, latitude, longitude, depth, md, ml, mw, magnitude, location, quality, year, month, day, week
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        earthquake['timestamp'],
+                        earthquake['date'],
+                        earthquake['time'],
+                        earthquake['latitude'],
+                        earthquake['longitude'],
+                        earthquake['depth'],
+                        earthquake.get('md'),
+                        earthquake.get('ml'),
+                        earthquake.get('mw'),
+                        earthquake.get('magnitude'),
+                        earthquake['location'],
+                        earthquake['quality'],
+                        year,
+                        month,
+                        day,
+                        week
+                    ))
+
+                    if cursor.rowcount > 0:
+                        inserted_count += 1
+
+                except sqlite3.IntegrityError:
+                    # Duplicate entry, skip
+                    continue
+                except KeyError as e:
+                    logger.warning(f"Missing key in earthquake data: {e}")
                     continue
 
-                # Parse date to extract year, month, day
-                eq_date = datetime.strptime(eq["date"], "%Y-%m-%d")
-                year, month, day = eq_date.year, eq_date.month, eq_date.day
-
-                # Get week number
-                _, week, _ = eq_date.isocalendar()
-
-                cursor.execute('''
-                INSERT INTO earthquakes
-                (timestamp, date, time, latitude, longitude, depth, md, ml, mw, magnitude,
-                location, quality, year, month, day, week)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    eq["timestamp"],
-                    eq["date"],
-                    eq["time"],
-                    eq["latitude"],
-                    eq["longitude"],
-                    eq["depth"],
-                    eq["md"],
-                    eq["ml"],
-                    eq["mw"],
-                    eq["magnitude"],
-                    eq["location"],
-                    eq["quality"],
-                    year,
-                    month,
-                    day,
-                    week
-                ))
-
-                inserted += cursor.rowcount
-
             conn.commit()
-            return inserted
-        except sqlite3.Error as e:
-            conn.rollback()
-            logger.error(f"Error inserting earthquake data: {e}")
-            raise Exception(f"Error inserting earthquake data: {e}")
+            if inserted_count > 0:
+                logger.info(f"Inserted {inserted_count} new earthquakes")
+            return inserted_count
 
-    def get_latest_earthquakes(self, limit: int = 1000) -> List[Dict[str, Any]]:
+        except sqlite3.Error as e:
+            logger.error(f"Error inserting earthquakes: {e}")
+            raise Exception(f"Error inserting earthquakes: {e}")
+
+    def get_latest_earthquakes(self, limit: int = 10) -> List[Dict[str, Any]]:
         """
-        Get the latest earthquake records.
+        Get the latest earthquakes from the database.
 
         Args:
-            limit: Maximum number of records to return
+            limit: Maximum number of earthquakes to return
 
         Returns:
-            List of the latest earthquake records
+            List of earthquake dictionaries
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
+
             cursor.execute('''
             SELECT * FROM earthquakes
             ORDER BY timestamp DESC
             LIMIT ?
             ''', (limit,))
 
-            return [dict(row) for row in cursor.fetchall()]
-        except sqlite3.Error as e:
-            logger.error(f"Error retrieving latest earthquakes: {e}")
-            raise Exception(f"Error retrieving latest earthquakes: {e}")
+            earthquakes = cursor.fetchall()
+            return [self.convert_row_to_dict(earthquake) for earthquake in earthquakes]
 
-    def get_earthquakes_by_date(self, date_str: str) -> List[Dict[str, Any]]:
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching latest earthquakes: {e}")
+            raise Exception(f"Error fetching latest earthquakes: {e}")
+
+    def get_earthquakes_by_date(self, date: str, limit: int = 50) -> List[Dict[str, Any]]:
         """
-        Get earthquake records for a specific date.
+        Get earthquakes for a specific date.
 
         Args:
-            date_str: Date string in YYYY-MM-DD format
+            date: Date in YYYY-MM-DD format
+            limit: Maximum number of earthquakes to return
 
         Returns:
-            List of earthquake records for the specified date
+            List of earthquake dictionaries
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
+
             cursor.execute('''
             SELECT * FROM earthquakes
             WHERE date = ?
             ORDER BY timestamp DESC
-            ''', (date_str,))
+            LIMIT ?
+            ''', (date, limit))
 
-            return [dict(row) for row in cursor.fetchall()]
+            earthquakes = cursor.fetchall()
+            return [self.convert_row_to_dict(earthquake) for earthquake in earthquakes]
+
         except sqlite3.Error as e:
-            logger.error(f"Error retrieving earthquakes for date {date_str}: {e}")
-            raise Exception(f"Error retrieving earthquakes for date {date_str}: {e}")
+            logger.error(f"Error fetching earthquakes by date: {e}")
+            raise Exception(f"Error fetching earthquakes by date: {e}")
 
-    def get_earthquakes_by_week(self, year: int, week: int) -> List[Dict[str, Any]]:
+    def get_earthquakes_by_week(self, year: int, week: int, limit: int = 100) -> List[Dict[str, Any]]:
         """
-        Get earthquake records for a specific week.
+        Get earthquakes for a specific week.
 
         Args:
-            year: Year as integer
-            week: Week number as integer
+            year: Year
+            week: Week number (1-53)
+            limit: Maximum number of earthquakes to return
 
         Returns:
-            List of earthquake records for the specified week
+            List of earthquake dictionaries
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
+
             cursor.execute('''
             SELECT * FROM earthquakes
             WHERE year = ? AND week = ?
             ORDER BY timestamp DESC
-            ''', (year, week))
+            LIMIT ?
+            ''', (year, week, limit))
 
-            return [dict(row) for row in cursor.fetchall()]
+            earthquakes = cursor.fetchall()
+            return [self.convert_row_to_dict(earthquake) for earthquake in earthquakes]
+
         except sqlite3.Error as e:
-            logger.error(f"Error retrieving earthquakes for week {week}, {year}: {e}")
-            raise Exception(f"Error retrieving earthquakes for week {week}, {year}: {e}")
+            logger.error(f"Error fetching earthquakes by week: {e}")
+            raise Exception(f"Error fetching earthquakes by week: {e}")
 
-    def get_earthquakes_by_month(self, year: int, month: int) -> List[Dict[str, Any]]:
+    def get_earthquakes_by_month(self, year: int, month: int, limit: int = 200) -> List[Dict[str, Any]]:
         """
-        Get earthquake records for a specific month.
+        Get earthquakes for a specific month.
 
         Args:
-            year: Year as integer
-            month: Month as integer
+            year: Year
+            month: Month (1-12)
+            limit: Maximum number of earthquakes to return
 
         Returns:
-            List of earthquake records for the specified month
+            List of earthquake dictionaries
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
+
             cursor.execute('''
             SELECT * FROM earthquakes
             WHERE year = ? AND month = ?
             ORDER BY timestamp DESC
-            ''', (year, month))
+            LIMIT ?
+            ''', (year, month, limit))
 
-            return [dict(row) for row in cursor.fetchall()]
+            earthquakes = cursor.fetchall()
+            return [self.convert_row_to_dict(earthquake) for earthquake in earthquakes]
+
         except sqlite3.Error as e:
-            logger.error(f"Error retrieving earthquakes for month {month}, {year}: {e}")
-            raise Exception(f"Error retrieving earthquakes for month {month}, {year}: {e}")
+            logger.error(f"Error fetching earthquakes by month: {e}")
+            raise Exception(f"Error fetching earthquakes by month: {e}")
 
     def get_summary_statistics(self) -> Dict[str, Any]:
         """
-        Get summary statistics about the database.
+        Get summary statistics about the earthquake database.
 
         Returns:
-            Dictionary containing statistics about the earthquake data
+            Dictionary containing summary statistics
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # Total count
-            cursor.execute("SELECT COUNT(*) as count FROM earthquakes")
-            total_count = cursor.fetchone()["count"]
+            # Get total count
+            cursor.execute('SELECT COUNT(*) FROM earthquakes')
+            total_count = cursor.fetchone()[0]
 
-            # Date range
-            cursor.execute("SELECT MIN(date) as min_date, MAX(date) as max_date FROM earthquakes")
+            # Get count by magnitude ranges
+            cursor.execute('''
+            SELECT
+                COUNT(CASE WHEN magnitude >= 5.0 THEN 1 END) as major_count,
+                COUNT(CASE WHEN magnitude >= 4.0 AND magnitude < 5.0 THEN 1 END) as moderate_count,
+                COUNT(CASE WHEN magnitude >= 3.0 AND magnitude < 4.0 THEN 1 END) as minor_count,
+                COUNT(CASE WHEN magnitude < 3.0 THEN 1 END) as micro_count
+            FROM earthquakes
+            WHERE magnitude IS NOT NULL
+            ''')
+
+            magnitude_stats = cursor.fetchone()
+
+            # Get latest earthquake
+            cursor.execute('SELECT * FROM earthquakes ORDER BY timestamp DESC LIMIT 1')
+            latest_earthquake = cursor.fetchone()
+
+            # Get date range
+            cursor.execute('SELECT MIN(date), MAX(date) FROM earthquakes')
             date_range = cursor.fetchone()
 
-            # Average magnitude
-            cursor.execute("SELECT AVG(magnitude) as avg_magnitude FROM earthquakes WHERE magnitude IS NOT NULL")
-            avg_magnitude = cursor.fetchone()["avg_magnitude"]
-
-            # Maximum magnitude
-            cursor.execute("SELECT MAX(magnitude) as max_magnitude FROM earthquakes WHERE magnitude IS NOT NULL")
-            max_magnitude = cursor.fetchone()["max_magnitude"]
-
-            # Count by quality
-            cursor.execute("SELECT quality, COUNT(*) as count FROM earthquakes GROUP BY quality")
-            quality_counts = {row["quality"]: row["count"] for row in cursor.fetchall()}
-
-            # Recent data (last 24 hours)
-            yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d %H:%M:%S')
-            cursor.execute("SELECT COUNT(*) as count FROM earthquakes WHERE timestamp > ?", (yesterday,))
-            recent_count = cursor.fetchone()["count"]
-
             return {
-                "total_earthquakes": total_count,
-                "date_range": {
-                    "first_record": date_range["min_date"] if date_range else None,
-                    "last_record": date_range["max_date"] if date_range else None
-                },
-                "magnitude_stats": {
-                    "average": avg_magnitude,
-                    "maximum": max_magnitude
-                },
-                "quality_distribution": quality_counts,
-                "last_24_hours": recent_count
+                'total_count': total_count,
+                'major_earthquakes': magnitude_stats[0] if magnitude_stats else 0,
+                'moderate_earthquakes': magnitude_stats[1] if magnitude_stats else 0,
+                'minor_earthquakes': magnitude_stats[2] if magnitude_stats else 0,
+                'micro_earthquakes': magnitude_stats[3] if magnitude_stats else 0,
+                'latest_earthquake': self.convert_row_to_dict(latest_earthquake) if latest_earthquake else None,
+                'date_range': {
+                    'start': date_range[0] if date_range else None,
+                    'end': date_range[1] if date_range else None
+                }
             }
+
         except sqlite3.Error as e:
-            logger.error(f"Error retrieving database statistics: {e}")
-            raise Exception(f"Error retrieving database statistics: {e}")
+            logger.error(f"Error getting summary statistics: {e}")
+            raise Exception(f"Error getting summary statistics: {e}")
 
-    def convert_row_to_dict(self, row: sqlite3.Row) -> Dict[str, Any]:
-        """Convert a database row to a dictionary suitable for API responses."""
-        data = dict(row)
-
-        # Remove database-specific fields from API response
-        if 'id' in data:
-            del data['id']
-        if 'year' in data:
-            del data['year']
-        if 'month' in data:
-            del data['month']
-        if 'day' in data:
-            del data['day']
-        if 'week' in data:
-            del data['week']
-
-        return data
-
-    def search_earthquakes(self,
-                          min_magnitude: Optional[float] = None,
-                          max_magnitude: Optional[float] = None,
-                          start_date: Optional[str] = None,
-                          end_date: Optional[str] = None,
-                          location_keyword: Optional[str] = None,
-                          limit: int = 100) -> List[Dict[str, Any]]:
+    def convert_row_to_dict(self, row) -> Dict[str, Any]:
         """
-        Search for earthquakes based on various criteria.
+        Convert a database row to a dictionary.
 
         Args:
-            min_magnitude: Minimum magnitude
-            max_magnitude: Maximum magnitude
-            start_date: Start date in YYYY-MM-DD format
-            end_date: End date in YYYY-MM-DD format
-            location_keyword: Keyword to search in location field
-            limit: Maximum number of records to return
+            row: Database row object
 
         Returns:
-            List of matching earthquake records
+            Dictionary representation of the row
+        """
+        if row is None:
+            return {}
+        return dict(row)
+
+    def search_earthquakes(self, min_magnitude: Optional[float] = None,
+                         max_magnitude: Optional[float] = None,
+                         start_date: Optional[str] = None,
+                         end_date: Optional[str] = None,
+                         location: Optional[str] = None,
+                         limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Search earthquakes with various filters.
+
+        Args:
+            min_magnitude: Minimum magnitude filter
+            max_magnitude: Maximum magnitude filter
+            start_date: Start date filter (YYYY-MM-DD)
+            end_date: End date filter (YYYY-MM-DD)
+            location: Location filter (partial match)
+            limit: Maximum number of results
+
+        Returns:
+            List of earthquake dictionaries
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
+            # Build dynamic query
             query = "SELECT * FROM earthquakes WHERE 1=1"
             params = []
 
@@ -398,166 +438,388 @@ class EarthquakeDatabase:
                 query += " AND magnitude <= ?"
                 params.append(max_magnitude)
 
-            if start_date is not None:
+            if start_date:
                 query += " AND date >= ?"
                 params.append(start_date)
 
-            if end_date is not None:
+            if end_date:
                 query += " AND date <= ?"
                 params.append(end_date)
 
-            if location_keyword is not None:
+            if location:
                 query += " AND location LIKE ?"
-                params.append(f"%{location_keyword}%")
+                params.append(f"%{location}%")
 
             query += " ORDER BY timestamp DESC LIMIT ?"
             params.append(limit)
 
             cursor.execute(query, params)
-            return [dict(row) for row in cursor.fetchall()]
+            earthquakes = cursor.fetchall()
+
+            return [self.convert_row_to_dict(earthquake) for earthquake in earthquakes]
+
         except sqlite3.Error as e:
             logger.error(f"Error searching earthquakes: {e}")
             raise Exception(f"Error searching earthquakes: {e}")
 
-    def register_webhook(self, name: str, url: str) -> Optional[int]:
+    def register_webhook(self, name: str, url: str, webhook_type: str) -> int:
         """
         Register a new webhook.
 
         Args:
             name: Webhook name
             url: Webhook URL
-            type: Webhook type
+            webhook_type: Type of webhook (discord, zulip, etc.)
 
         Returns:
-            ID of the newly created webhook
+            Webhook ID if successful
         """
-        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # Get current timestamp in ISO format
-            now = datetime.now().isoformat()
-
+            created_at = datetime.now().isoformat()
             cursor.execute('''
-            INSERT OR REPLACE INTO webhooks
-            (name, url, created_at)
-            VALUES (?, ?, ?)
-            ''', (name, url, now))
+            INSERT INTO webhooks (name, url, type, created_at)
+            VALUES (?, ?, ?, ?)
+            ''', (name, url, webhook_type, created_at))
 
             conn.commit()
-            return cursor.lastrowid
+            webhook_id = cursor.lastrowid
+            if webhook_id is None:
+                raise Exception("Failed to get webhook ID after insert")
+            logger.info(f"Registered webhook: {name} ({webhook_type})")
+            return webhook_id
+
+        except sqlite3.IntegrityError as e:
+            logger.error(f"Webhook registration failed - duplicate name or URL: {e}")
+            raise Exception(f"Webhook with name '{name}' or URL '{url}' already exists")
         except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
             logger.error(f"Error registering webhook: {e}")
             raise Exception(f"Error registering webhook: {e}")
 
-    def update_webhook_last_sent(self, webhook_id: int) -> bool:
+    def update_webhook_last_sent(self, webhook_id: int):
         """
-        Update the last_sent_at timestamp for a webhook.
+        Update the last sent timestamp for a webhook.
 
         Args:
-            webhook_id: ID of the webhook to update
-
-        Returns:
-            True if successful, False if webhook not found
+            webhook_id: Webhook ID
         """
-        conn = None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
-
-            # Get current timestamp in ISO format
-            now = datetime.now().isoformat()
 
             cursor.execute('''
             UPDATE webhooks
-            SET last_sent_at = ?
-            WHERE id = ?
-            ''', (now, webhook_id))
-
-            conn.commit()
-            return cursor.rowcount > 0
-        except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
-            logger.error(f"Error updating webhook last_sent_at: {e}")
-            raise Exception(f"Error updating webhook last_sent_at: {e}")
-
-    def get_webhook(self, webhook_id: int) -> Optional[Dict[str, Any]]:
-        """
-        Get webhook by ID.
-
-        Args:
-            webhook_id: ID of the webhook to retrieve
-
-        Returns:
-            Dictionary containing webhook data or None if not found
-        """
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
-
-            cursor.execute('''
-            SELECT * FROM webhooks
+            SET last_sent_at = datetime()
             WHERE id = ?
             ''', (webhook_id,))
 
-            row = cursor.fetchone()
-            return dict(row) if row else None
-        except sqlite3.Error as e:
-            logger.error(f"Error retrieving webhook: {e}")
-            raise Exception(f"Error retrieving webhook: {e}")
+            conn.commit()
 
-    def get_webhooks(self) -> List[Dict[str, Any]]:
+        except sqlite3.Error as e:
+            logger.error(f"Error updating webhook last sent: {e}")
+            raise Exception(f"Error updating webhook last sent: {e}")
+
+    def get_webhook(self, webhook_id: int) -> Optional[Dict[str, Any]]:
         """
-        Get all registered webhooks.
+        Get a specific webhook by ID.
+
+        Args:
+            webhook_id: Webhook ID
 
         Returns:
-            List of dictionaries containing webhook data
+            Webhook dictionary or None if not found
         """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute('''
-            SELECT * FROM webhooks
-            ORDER BY name ASC
+            SELECT id, name, url, type, last_sent_at, created_at
+            FROM webhooks
+            WHERE id = ?
+            ''', (webhook_id,))
+
+            webhook = cursor.fetchone()
+            return self.convert_row_to_dict(webhook) if webhook else None
+
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching webhook: {e}")
+            raise Exception(f"Error fetching webhook: {e}")
+
+    def get_webhooks(self) -> List[Dict[str, Any]]:
+        """
+        Get all webhooks.
+
+        Returns:
+            List of webhook dictionaries
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            SELECT id, name, url, type, last_sent_at, created_at
+            FROM webhooks
+            ORDER BY name
             ''')
 
-            return [dict(row) for row in cursor.fetchall()]
+            webhooks = cursor.fetchall()
+            return [self.convert_row_to_dict(webhook) for webhook in webhooks]
+
         except sqlite3.Error as e:
-            logger.error(f"Error retrieving webhooks: {e}")
-            raise Exception(f"Error retrieving webhooks: {e}")
+            logger.error(f"Error fetching webhooks: {e}")
+            raise Exception(f"Error fetching webhooks: {e}")
 
     def delete_webhook(self, webhook_id: int) -> bool:
         """
         Delete a webhook by ID.
 
         Args:
-            webhook_id: ID of the webhook to delete
+            webhook_id: Webhook ID
 
         Returns:
-            True if successful, False if webhook not found
+            True if webhook was deleted, False if not found
         """
-        conn = None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('DELETE FROM webhooks WHERE id = ?', (webhook_id,))
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"Deleted webhook with ID: {webhook_id}")
+                return True
+            else:
+                logger.warning(f"No webhook found with ID: {webhook_id}")
+                return False
+
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting webhook: {e}")
+            raise Exception(f"Error deleting webhook: {e}")
+
+    def create_poll(self, name: str, poll_type: str, min_magnitude: float = 1.7) -> int:
+        """
+        Create a new poll.
+
+        Args:
+            name: Poll name
+            poll_type: Type of poll
+            min_magnitude: Minimum magnitude threshold
+
+        Returns:
+            Poll ID if successful
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            created_at = datetime.now().isoformat()
+            cursor.execute('''
+            INSERT INTO polls (name, type, min_magnitude, created_at)
+            VALUES (?, ?, ?, ?)
+            ''', (name, poll_type, min_magnitude, created_at))
+
+            conn.commit()
+            poll_id = cursor.lastrowid
+            if poll_id is None:
+                raise Exception("Failed to get poll ID after insert")
+            logger.info(f"Created poll: {name} ({poll_type})")
+            return poll_id
+
+        except sqlite3.IntegrityError as e:
+            logger.error(f"Poll creation failed - duplicate name: {e}")
+            raise Exception(f"Poll with name '{name}' already exists")
+        except sqlite3.Error as e:
+            logger.error(f"Error creating poll: {e}")
+            raise Exception(f"Error creating poll: {e}")
+
+    def get_polls(self) -> List[Dict[str, Any]]:
+        """
+        Get all polls.
+
+        Returns:
+            List of poll dictionaries
+        """
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
             cursor.execute('''
-            DELETE FROM webhooks
-            WHERE id = ?
-            ''', (webhook_id,))
+            SELECT id, name, type, min_magnitude, created_at
+            FROM polls
+            ORDER BY name
+            ''')
+
+            polls = cursor.fetchall()
+            return [self.convert_row_to_dict(poll) for poll in polls]
+
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching polls: {e}")
+            raise Exception(f"Error fetching polls: {e}")
+
+    def get_poll_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific poll by name.
+
+        Args:
+            name: Poll name
+
+        Returns:
+            Poll dictionary or None if not found
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            SELECT id, name, type, min_magnitude, created_at
+            FROM polls
+            WHERE name = ?
+            ''', (name,))
+
+            poll = cursor.fetchone()
+            return self.convert_row_to_dict(poll) if poll else None
+
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching poll by name: {e}")
+            raise Exception(f"Error fetching poll by name: {e}")
+
+    def delete_poll(self, poll_id: int) -> bool:
+        """
+        Delete a poll by ID.
+
+        Args:
+            poll_id: Poll ID
+
+        Returns:
+            True if poll was deleted, False if not found
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('DELETE FROM polls WHERE id = ?', (poll_id,))
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"Deleted poll with ID: {poll_id}")
+                return True
+            else:
+                logger.warning(f"No poll found with ID: {poll_id}")
+                return False
+
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting poll: {e}")
+            raise Exception(f"Error deleting poll: {e}")
+
+    def create_wa_user(self, name: str, phone_number: str) -> int:
+        """
+        Create a new WhatsApp user.
+
+        Args:
+            name: User name
+            phone_number: Phone number
+
+        Returns:
+            User ID if successful
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            created_at = datetime.now().isoformat()
+            cursor.execute('''
+            INSERT INTO wa_users (name, phone_number, created_at)
+            VALUES (?, ?, ?)
+            ''', (name, phone_number, created_at))
 
             conn.commit()
-            return cursor.rowcount > 0
+            user_id = cursor.lastrowid
+            if user_id is None:
+                raise Exception("Failed to get user ID after insert")
+            logger.info(f"Created WhatsApp user: {name} ({phone_number})")
+            return user_id
+
         except sqlite3.Error as e:
-            if conn:
-                conn.rollback()
-            logger.error(f"Error deleting webhook: {e}")
-            raise Exception(f"Error deleting webhook: {e}")
+            logger.error(f"Error creating WhatsApp user: {e}")
+            raise Exception(f"Error creating WhatsApp user: {e}")
+
+    def get_wa_users(self) -> List[Dict[str, Any]]:
+        """
+        Get all WhatsApp users.
+
+        Returns:
+            List of user dictionaries
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            SELECT id, name, phone_number, last_sent_at, created_at
+            FROM wa_users
+            ORDER BY name
+            ''')
+
+            users = cursor.fetchall()
+            return [self.convert_row_to_dict(user) for user in users]
+
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching WhatsApp users: {e}")
+            raise Exception(f"Error fetching WhatsApp users: {e}")
+
+    def update_wa_user_last_sent(self, phone_number: str):
+        """
+        Update the last sent timestamp for a WhatsApp user.
+
+        Args:
+            phone_number: User's phone number
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            UPDATE wa_users
+            SET last_sent_at = datetime()
+            WHERE phone_number = ?
+            ''', (phone_number,))
+
+            conn.commit()
+
+        except sqlite3.Error as e:
+            logger.error(f"Error updating WhatsApp user last sent: {e}")
+            raise Exception(f"Error updating WhatsApp user last sent: {e}")
+
+    def delete_last_earthquake(self):
+        """
+        Delete the most recent earthquake from the database.
+        """
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute('''
+            DELETE FROM earthquakes
+            WHERE id = (
+                SELECT id FROM earthquakes
+                ORDER BY timestamp DESC
+                LIMIT 1
+            )
+            ''')
+
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info("Deleted the most recent earthquake")
+            else:
+                logger.warning("No earthquakes found to delete")
+
+        except sqlite3.Error as e:
+            logger.error(f"Error deleting last earthquake: {e}")
+            raise Exception(f"Error deleting last earthquake: {e}")
 
     def close(self):
         """Close the database connection for the current thread."""
