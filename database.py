@@ -137,6 +137,17 @@ class EarthquakeDatabase:
             )
             ''')
 
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS wa_messages (
+                id TEXT PRIMARY KEY,
+                wa_user_id INTEGER NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT 0,
+                message TEXT,
+                updated_at DATETIME NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            ''')
+
             # Create indexes for polls tables
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_polls_name ON polls(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_wa_users_phone ON wa_users(phone_number)')
@@ -145,6 +156,79 @@ class EarthquakeDatabase:
         except sqlite3.Error as e:
             logger.error(f"Error initializing database schema: {e}")
             raise Exception(f"Error initializing database schema: {e}")
+
+    def create_wa_message(self, phone_number, message_id):
+        if not phone_number or not message_id:
+            return 0
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Example: Get wa_user_id from another table
+            cursor.execute("SELECT id FROM wa_users WHERE phone_number = ?", (phone_number,))
+            user = cursor.fetchone()
+            if not user:
+                logger.error(f"No wa_user found for phone number: {phone_number}")
+                return 0
+
+            wa_user_id = user[0]
+            now = datetime.utcnow().isoformat()
+
+            cursor.execute('''
+                INSERT INTO wa_messages (id, wa_user_id, is_read, message, updated_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (message_id, wa_user_id, 0, None, now, now))
+
+            conn.commit()
+            return cursor.lastrowid
+
+        except sqlite3.Error as e:
+            logger.error(f"Error creating WhatsApp message: {e}")
+            raise Exception(f"Error creating WhatsApp message: {e}")
+
+    def update_wa_message(self, message_id, is_read = False, message = None):
+        if not message_id:
+            return 0
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            applied = 0
+
+            if is_read and message is None:
+                cursor.execute("UPDATE wa_messages SET is_read = ? WHERE id = ?", (is_read, message_id,))
+                applied += 1
+
+            if message is not None:
+                cursor.execute("UPDATE wa_messages SET is_read = ?, message = ? WHERE id = ?", (True, message, message_id,))
+                applied += 1
+
+            if applied > 0:
+                conn.commit()
+
+        except sqlite3.Error as e:
+            logger.error(f"Error updating WhatsApp message: {e}")
+            raise Exception(f"Error updating WhatsApp message: {e}")
+
+    def get_wa_messages(self):
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            wa_messages = cursor.execute('''
+                SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message
+                FROM wa_messages
+                JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
+                LIMIT 1000
+                ''')
+
+            return [dict(row) for row in wa_messages]
+
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching WhatsApp messages: {e}")
+            raise Exception(f"Error fetching WhatsApp messages: {e}")
 
     def insert_earthquakes(self, earthquakes: List[Dict[str, Any]]) -> int:
         """

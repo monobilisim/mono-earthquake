@@ -230,18 +230,6 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
                             {
                                 "type": "text",
                                 "text": user_name
-                            },
-                            {
-                                "type": "text",
-                                "text": str(magnitude)
-                            },
-                            {
-                                "type": "text",
-                                "text": location
-                            },
-                            {
-                                "type": "text",
-                                "text": str(depth)
                             }
                         ]
                     }
@@ -260,6 +248,7 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
 
         if response.status_code == 200:
             db.update_wa_user_last_sent(phone_number)
+            db.create_wa_message(phone_number, response.json()['messages'][0]['id'])
             print(f"Successfully sent template to {user_name} ({phone_number})")
             return True
         else:

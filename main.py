@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, PlainTextResponse
 import base64
+from starlette.responses import FileResponse
 import uvicorn
 import asyncio
 import logging
@@ -14,6 +15,7 @@ from load_dotenv import load_dotenv
 from webhooks import discord, zulip, whatsapp, generic
 from polls_processor import process_whatsapp_webhook, get_template_statistics, is_polls_related_webhook
 from polls import send_wa_template
+from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
@@ -242,39 +244,133 @@ async def wa_callbackGet(request: Request):
 
 @app.post("/wa-callback", tags=["Webhooks"])
 async def wa_callbackPost(request: Request):
-    """Webhook endpoint for WhatsApp callback"""
     data = await request.json()
-    print(f"Received WhatsApp callback: {data}")
-    logger.info(f"Received WhatsApp webhook callback {data}")
 
-    if is_polls_related_webhook(data):
-        logger.info("Processing WhatsApp webhook for polls/flows")
-        success = process_whatsapp_webhook(data)
-        if not success:
-            logger.error("Failed to process WhatsApp polls webhook")
-    else:
-        logger.info("WhatsApp webhook not related to polls - standard processing")
+    logger.info("Received WhatsApp callback")
+    logger.info(f"Request body: {data}")
+
+    value = data["entry"][0]["changes"][0]["value"]
+
+    is_read = False
+    message = None
+    id = None
+
+    if "statuses" in value:
+        id = value["statuses"][0].get("id")
+        is_read = value["statuses"][0].get("status") == "read"
+
+    if "messages" in value:
+        id = value["messages"][0]["context"].get("id")
+        message = value["messages"][0]["button"].get("text")
+
+    db = None
+    try:
+        from database import EarthquakeDatabase
+
+        db = EarthquakeDatabase()
+
+        if is_read is True and message is None:
+            db.update_wa_message(id, True, None)
+
+        if message is not None:
+            db.update_wa_message(id, True, message)
+
+    except Exception as e:
+        logger.error(f"Error updating WhatsApp message status in database: {str(e)}")
+
+    finally:
+        if db in locals():
+            if db is not None:
+                db.close()
+
+    # print(f"Received WhatsApp callback: {data}")
+    # logger.info(f"Received WhatsApp webhook callback {data}")
+
+    # if is_polls_related_webhook(data):
+    #     logger.info("Processing WhatsApp webhook for polls")
+    #     success = process_whatsapp_webhook(data)
+    #     if not success:
+    #         logger.error("Failed to process WhatsApp polls webhook")
+    # else:
+    #     logger.info("WhatsApp webhook not related to polls - standard processing")
 
     return Response(status_code=200)
 
-@app.get("/", tags=["Info"])
-async def root():
-    """Root endpoint providing API information"""
-    return {
-        "name": "KOERI Earthquake Data API",
-        "version": "1.2.0",
-        "description": "API for accessing earthquake data from Kandilli Observatory and Earthquake Research Institute",
-        "database": "SQLite",
-        "endpoints": {
-            "GET /docs": "Swagger based documentation page for API usage",
-            "GET /stats": "Get statistics about the earthquake database",
-            "GET /earthquakes/latest": "Get the latest earthquake data",
-            "GET /earthquakes/day/{date}": "Get earthquake data for a specific date",
-            "GET /earthquakes/week/{year}/{week}": "Get earthquake data for a specific week",
-            "GET /earthquakes/month/{year}/{month}": "Get earthquake data for a specific month",
-            "GET /earthquakes/search": "Search earthquake data based on various criteria"
-        }
-    }
+@app.post("/wa_message_stats", tags=["Messages"])
+async def wa_message_stats(request: Request):
+    admin_username = os.getenv("ADMIN_USERNAME", None)
+    if not admin_username:
+        return Response(status_code=403, content="Admin username not set in environment variables")
+    admin_password = os.getenv("ADMIN_PASSWORD", None)
+    if not admin_password:
+        return Response(status_code=403, content="Admin password not set in environment variables")
+
+    body = await request.json()
+
+    logger.info(body)
+
+    if body["username"] != admin_username or body["password"] != admin_password:
+        return Response(status_code=403, content="Invalid admin credentials")
+
+    db = None
+    try:
+        from database import EarthquakeDatabase
+
+        db = EarthquakeDatabase()
+        rows = db.get_wa_messages()
+
+        if not rows:
+            return JSONResponse(status_code=404, content={"message": "No WhatsApp webhook statistics found"})
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "count": len(rows),
+                "data": rows
+            }
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error fetching WhatsApp webhook statistics: {str(e)}"}
+        )
+        logger.error(f"Error fetching WhatsApp webhook statistics: {str(e)}")
+
+    finally:
+        if db in locals():
+            if db is not None:
+                db.close()
+
+app.mount("/static", StaticFiles(directory="ui/dist", html=True), name="static")
+app.mount("/assets", StaticFiles(directory="ui/dist/assets"), name="assets")
+
+@app.get("/", tags=["Ui"])
+async def get_ui():
+    return FileResponse("ui/dist/index.html")
+
+@app.get("/assets/{asset}", tags=["Ui"])
+async def get_asset(asset: str):
+    return FileResponse(f"ui/dist/assets/{asset}")
+
+# @app.get("/", tags=["Info"])
+# async def root():
+#     """Root endpoint providing API information"""
+#     return {
+#         "name": "KOERI Earthquake Data API",
+#         "version": "1.2.0",
+#         "description": "API for accessing earthquake data from Kandilli Observatory and Earthquake Research Institute",
+#         "database": "SQLite",
+#         "endpoints": {
+#             "GET /docs": "Swagger based documentation page for API usage",
+#             "GET /stats": "Get statistics about the earthquake database",
+#             "GET /earthquakes/latest": "Get the latest earthquake data",
+#             "GET /earthquakes/day/{date}": "Get earthquake data for a specific date",
+#             "GET /earthquakes/week/{year}/{week}": "Get earthquake data for a specific week",
+#             "GET /earthquakes/month/{year}/{month}": "Get earthquake data for a specific month",
+#             "GET /earthquakes/search": "Search earthquake data based on various criteria"
+#         }
+#     }
 
 @app.get("/polling/status", tags=["System"])
 async def polling_status():
