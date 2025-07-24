@@ -148,6 +148,35 @@ class EarthquakeDatabase:
             )
             ''')
 
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(255) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                session_token TEXT NOT NULL UNIQUE,
+                expiration_date DATETIME NOT NULL DEFAULT (DATETIME('now', '+7 days')),
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+            ''')
+
+            cursor.execute('''
+            CREATE TRIGGER IF NOT EXISTS delete_expired_sessions
+            AFTER INSERT ON sessions
+            FOR EACH ROW
+            BEGIN
+                DELETE FROM sessions WHERE expiration_date <= CURRENT_TIMESTAMP;
+            END;
+            ''')
+
             # Create indexes for polls tables
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_polls_name ON polls(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_wa_users_phone ON wa_users(phone_number)')
@@ -156,6 +185,95 @@ class EarthquakeDatabase:
         except sqlite3.Error as e:
             logger.error(f"Error initializing database schema: {e}")
             raise Exception(f"Error initializing database schema: {e}")
+
+    def clear_old_wa_messages(self):
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            # Delete messages, keeping only the last 2 per wa_user_id
+            cursor.execute('''
+                DELETE FROM wa_messages
+                WHERE id NOT IN (
+                    SELECT id FROM (
+                        SELECT id
+                        FROM wa_messages wm
+                        WHERE (
+                            SELECT COUNT(*)
+                            FROM wa_messages
+                            WHERE wa_user_id = wm.wa_user_id
+                              AND datetime(created_at) >= datetime(wm.created_at)
+                        ) <= 2
+                    )
+                )
+            ''')
+
+            conn.commit()
+            logger.info("Cleared WhatsApp messages, keeping last 2 per user")
+        except sqlite3.Error as e:
+            logger.error(f"Error clearing old WhatsApp messages: {e}")
+            raise Exception(f"Error clearing old WhatsApp messages: {e}")
+
+    def authenticate_user(self, name, password):
+        if not name or not password:
+            return None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM users WHERE name = ? AND password = ?", (name, password))
+            user = cursor.fetchone()
+            if user:
+                return user[0]  # Return user ID
+            return None
+
+        except sqlite3.Error as e:
+            logger.error(f"Error authenticating user: {e}")
+            raise Exception(f"Error authenticating user: {e}")
+
+    def create_user(self, name, password):
+        if not name or not password:
+            return None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO users (name, password) VALUES (?, ?)", (name, password))
+            user_id = cursor.lastrowid
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error creating user: {e}")
+            raise Exception(f"Error creating user: {e}")
+
+    def create_session(self, user_id, session_token):
+        if not user_id or not session_token:
+            return None
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO sessions (user_id, session_token) VALUES (?, ?)", (user_id, session_token))
+            session_id = cursor.lastrowid
+            conn.commit()
+            return True
+        except sqlite3.Error as e:
+            logger.error(f"Error creating session: {e}")
+            raise Exception(f"Error creating session: {e}")
+
+    def check_session(self, session_token):
+        if not session_token:
+            return False
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT session_token
+                FROM sessions
+                WHERE session_token = ? AND expiration_date > CURRENT_TIMESTAMP
+            """, (session_token,))
+            session = cursor.fetchone()
+            return session is not None
+        except sqlite3.Error as e:
+            logger.error(f"Error checking session: {e}")
+            raise Exception(f"Error checking session: {e}")
 
     def create_wa_message(self, phone_number, message_id):
         if not phone_number or not message_id:
@@ -218,7 +336,7 @@ class EarthquakeDatabase:
             cursor = conn.cursor()
 
             wa_messages = cursor.execute('''
-                SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message
+                SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message, wa_messages.is_read as is_read, wa_messages.created_at as created_at
                 FROM wa_messages
                 JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
                 LIMIT 1000

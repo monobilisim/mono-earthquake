@@ -4,6 +4,37 @@
     let messageRows = $state([]);
     let loading = $state(false);
     let error = $state("");
+    let sessionToken = $state("");
+    let session = $state("");
+
+    session =
+        document.cookie
+            .split("; ")
+            .find((row) => row.startsWith("session="))
+            ?.split("=")[1] || "";
+
+    async function login(): Promise<void> {
+        if (session) {
+            const response = await fetch(`/wa_message_stats`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ session }),
+            });
+
+            if (!response.ok) {
+                throw new Error("Login failed");
+            }
+
+            const data = await response.json();
+            messageRows = data.data || [];
+        }
+    }
+
+    $effect(() => {
+        login();
+    });
 
     async function handleSubmit(event: Event) {
         event.preventDefault();
@@ -24,21 +55,17 @@
             }
 
             const data = await response.json();
-            console.log("Login successful:", data);
-            messageRows = data.data || []; // Note: using 'data' not 'messageRows' based on your API response
+            messageRows = data.data || [];
+            sessionToken = data.session_token;
+
+            if (sessionToken) {
+                document.cookie = `session=${sessionToken}; path=/; secure; SameSite=None`;
+            }
         } catch (err) {
-            console.error("Error during login:", err);
             error = "Login failed. Please check your credentials.";
         } finally {
             loading = false;
         }
-    }
-
-    function logout() {
-        messageRows = [];
-        username = "";
-        password = "";
-        error = "";
     }
 </script>
 
@@ -47,11 +74,6 @@
         <div class="container">
             <div class="header">
                 <h1>WhatsApp Message Statistics</h1>
-                <!-- <button class="logout-btn" onclick={logout}>Logout</button> -->
-            </div>
-
-            <div class="stats">
-                <p>Total Messages: <strong>{messageRows.length}</strong></p>
             </div>
 
             <div class="table-container">
@@ -62,6 +84,7 @@
                             <th>Phone Number</th>
                             <th>Message</th>
                             <th>Status</th>
+                            <th>Created At</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -81,16 +104,21 @@
                                     {/if}
                                 </td>
                                 <td>
-                                    {#if row.message}
+                                    {#if row.is_read}
                                         <span class="status responded"
-                                            >Responded</span
+                                            >Read</span
                                         >
                                     {:else}
                                         <span class="status no-response"
-                                            >No Response</span
+                                            >Not Read</span
                                         >
                                     {/if}
                                 </td>
+                                <td
+                                    >{new Date(
+                                        row.created_at.replace(" ", "T") + "Z",
+                                    ).toLocaleString()}</td
+                                >
                             </tr>
                         {/each}
                     </tbody>
@@ -166,32 +194,6 @@
     .header h1 {
         margin: 0;
         font-size: 24px;
-    }
-
-    .logout-btn {
-        background: rgba(255, 255, 255, 0.2);
-        color: white;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        padding: 8px 16px;
-        border-radius: 4px;
-        cursor: pointer;
-        transition: background-color 0.2s;
-    }
-
-    .logout-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-
-    .stats {
-        padding: 20px 30px;
-        background: #f8f9fa;
-        border-bottom: 1px solid #e9ecef;
-    }
-
-    .stats p {
-        margin: 0;
-        font-size: 16px;
-        color: #333;
     }
 
     .table-container {

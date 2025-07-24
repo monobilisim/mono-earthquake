@@ -343,6 +343,26 @@ def main():
             if db:
                 db.close()
 
+    elif command == "create-user":
+        if len(sys.argv) != 4:
+            print("Error: create-user command requires a name and password")
+            sys.exit(1)
+
+        db = None
+        try:
+            db = EarthquakeDatabase()
+            name = sys.argv[2]
+            password = sys.argv[3]
+
+            db.create_user(name, password)
+            print(f"User '{name}' with password '{password}' created successfully.")
+        except Exception as e:
+            print(f"Error creating user: {e}", file=sys.stderr)
+            sys.exit(1)
+        finally:
+            if db:
+                db.close()
+
     else:
         print("Error: Invalid command or arguments")
         show_help()

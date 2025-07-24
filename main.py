@@ -7,6 +7,7 @@ import uvicorn
 import asyncio
 import logging
 import os
+import secrets
 from datetime import datetime
 import calendar
 from parser import KoeriParser
@@ -16,6 +17,7 @@ from webhooks import discord, zulip, whatsapp, generic
 from polls_processor import process_whatsapp_webhook, get_template_statistics, is_polls_related_webhook
 from polls import send_wa_template
 from fastapi.staticfiles import StaticFiles
+from database import EarthquakeDatabase
 
 load_dotenv()
 
@@ -70,8 +72,6 @@ async def refresh_earthquake_data():
 
             db = None
             try:
-                from database import EarthquakeDatabase
-
                 db = EarthquakeDatabase()
 
                 polls = db.get_polls()
@@ -111,10 +111,6 @@ async def send_notifications_to_webhooks(earthquake_data):
     """
     db = None
     try:
-        # Import necessary functions
-        from database import EarthquakeDatabase
-
-        # Create a direct database connection for this function
         db = EarthquakeDatabase()
 
         # Get all webhooks
@@ -265,8 +261,6 @@ async def wa_callbackPost(request: Request):
 
     db = None
     try:
-        from database import EarthquakeDatabase
-
         db = EarthquakeDatabase()
 
         if is_read is True and message is None:
@@ -274,6 +268,8 @@ async def wa_callbackPost(request: Request):
 
         if message is not None:
             db.update_wa_message(id, True, message)
+
+        db.clear_old_wa_messages()
 
     except Exception as e:
         logger.error(f"Error updating WhatsApp message status in database: {str(e)}")
@@ -283,64 +279,75 @@ async def wa_callbackPost(request: Request):
             if db is not None:
                 db.close()
 
-    # print(f"Received WhatsApp callback: {data}")
-    # logger.info(f"Received WhatsApp webhook callback {data}")
-
-    # if is_polls_related_webhook(data):
-    #     logger.info("Processing WhatsApp webhook for polls")
-    #     success = process_whatsapp_webhook(data)
-    #     if not success:
-    #         logger.error("Failed to process WhatsApp polls webhook")
-    # else:
-    #     logger.info("WhatsApp webhook not related to polls - standard processing")
-
     return Response(status_code=200)
 
 @app.post("/wa_message_stats", tags=["Messages"])
 async def wa_message_stats(request: Request):
-    admin_username = os.getenv("ADMIN_USERNAME", None)
-    if not admin_username:
-        return Response(status_code=403, content="Admin username not set in environment variables")
-    admin_password = os.getenv("ADMIN_PASSWORD", None)
-    if not admin_password:
-        return Response(status_code=403, content="Admin password not set in environment variables")
-
     body = await request.json()
-
     logger.info(body)
 
-    if body["username"] != admin_username or body["password"] != admin_password:
-        return Response(status_code=403, content="Invalid admin credentials")
+    username = None
+    password = None
+    session = None
+    if body.get("username") is not None:
+        username = body.get("username")
+    if body.get("password") is not None:
+        password = body.get("password")
+    if body.get("session") is not None:
+        session = body.get("session")
+
+    if not session and (not username or not password):
+        return Response(status_code=400, content="Username and password required")
 
     db = None
     try:
-        from database import EarthquakeDatabase
-
         db = EarthquakeDatabase()
+
+        session_token = None
+        if not session:
+            user_id = db.authenticate_user(username, password)
+            if user_id is None:
+                return JSONResponse(status_code=401, content={"message": "Invalid username or password"})
+            session_token = secrets.token_urlsafe(32)
+            db.create_session(user_id, session_token)
+
+        if session:
+            if db.check_session(session) is not True:
+                return JSONResponse(status_code=403, content={"message": "Invalid session token"})
+
         rows = db.get_wa_messages()
 
         if not rows:
             return JSONResponse(status_code=404, content={"message": "No WhatsApp webhook statistics found"})
 
-        return JSONResponse(
-            status_code=200,
-            content={
-                "count": len(rows),
-                "data": rows
-            }
-        )
+        if session:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "count": len(rows),
+                    "data": rows,
+                }
+            )
+        else:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "count": len(rows),
+                    "data": rows,
+                    "session_token": session_token
+                }
+            )
 
     except Exception as e:
+        logger.error(f"Error in wa_message_stats: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={"message": f"Error fetching WhatsApp webhook statistics: {str(e)}"}
         )
-        logger.error(f"Error fetching WhatsApp webhook statistics: {str(e)}")
 
     finally:
-        if db in locals():
-            if db is not None:
-                db.close()
+        if db:
+            db.close()
 
 app.mount("/static", StaticFiles(directory="ui/dist", html=True), name="static")
 app.mount("/assets", StaticFiles(directory="ui/dist/assets"), name="assets")
