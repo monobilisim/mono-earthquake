@@ -132,6 +132,7 @@ class EarthquakeDatabase:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(255) NOT NULL,
                 phone_number VARCHAR(20) NOT NULL UNIQUE,
+                poll_name VARCHAR(255) DEFAULT NULL,
                 last_sent_at DATETIME,
                 created_at TEXT NOT NULL
             )
@@ -143,6 +144,7 @@ class EarthquakeDatabase:
                 wa_user_id INTEGER NOT NULL,
                 is_read BOOLEAN NOT NULL DEFAULT 0,
                 message TEXT,
+                poll_name VARCHAR(255) DEFAULT NULL,
                 updated_at DATETIME NOT NULL,
                 created_at TEXT NOT NULL
             )
@@ -153,6 +155,7 @@ class EarthquakeDatabase:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(255) NOT NULL UNIQUE,
                 password VARCHAR(255) NOT NULL,
+                poll_name VARCHAR(255) DEFAULT NULL,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -168,6 +171,9 @@ class EarthquakeDatabase:
             )
             ''')
 
+            # ON DELETE CASCADE does not work if foreign keys are not enabled
+            cursor.execute("PRAGMA foreign_keys = ON;")
+
             cursor.execute('''
             CREATE TRIGGER IF NOT EXISTS delete_expired_sessions
             AFTER INSERT ON sessions
@@ -175,6 +181,23 @@ class EarthquakeDatabase:
             BEGIN
                 DELETE FROM sessions WHERE expiration_date <= CURRENT_TIMESTAMP;
             END;
+            ''')
+
+            cursor.execute('''
+                CREATE TRIGGER IF NOT EXISTS keep_last_sessions
+                AFTER INSERT ON sessions
+                FOR EACH ROW
+                BEGIN
+                    DELETE FROM sessions
+                    WHERE user_id = NEW.user_id
+                      AND id NOT IN (
+                          SELECT id
+                          FROM sessions
+                          WHERE user_id = NEW.user_id
+                          ORDER BY id DESC
+                          LIMIT 1
+                      );
+                END;
             ''')
 
             # Create indexes for polls tables
@@ -191,30 +214,50 @@ class EarthquakeDatabase:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            # Delete messages, keeping only the last 2 per wa_user_id
+            # Get all messages - no join needed since poll_name is in wa_messages
             cursor.execute('''
-                DELETE FROM wa_messages
-                WHERE id NOT IN (
-                    SELECT id FROM (
-                        SELECT id
-                        FROM wa_messages wm
-                        WHERE (
-                            SELECT COUNT(*)
-                            FROM wa_messages
-                            WHERE wa_user_id = wm.wa_user_id
-                              AND datetime(created_at) >= datetime(wm.created_at)
-                        ) <= 2
-                    )
-                )
+                SELECT id, poll_name, wa_user_id, created_at
+                FROM wa_messages
+                ORDER BY poll_name, wa_user_id, created_at DESC
             ''')
+            all_messages = cursor.fetchall()
 
+            # Group messages by (poll_name, wa_user_id) and keep only the latest
+            messages_to_keep = set()
+            seen_combinations = set()
+
+            for msg_id, poll_name, wa_user_id, created_at in all_messages:
+                combination = (poll_name, wa_user_id)
+                if combination not in seen_combinations:
+                    messages_to_keep.add(msg_id)
+                    seen_combinations.add(combination)
+
+            # Delete messages not in the keep set
+            if messages_to_keep:
+                placeholders = ','.join('?' * len(messages_to_keep))
+                cursor.execute(f'''
+                    DELETE FROM wa_messages
+                    WHERE id NOT IN ({placeholders})
+                ''', list(messages_to_keep))
+            else:
+                cursor.execute('DELETE FROM wa_messages')
+
+            deleted_count = cursor.rowcount
             conn.commit()
-            logger.info("Cleared WhatsApp messages, keeping last 2 per user")
+            logger.info(f"Cleared {deleted_count} WhatsApp messages, keeping last message per user per poll")
+
         except sqlite3.Error as e:
             logger.error(f"Error clearing old WhatsApp messages: {e}")
             raise Exception(f"Error clearing old WhatsApp messages: {e}")
 
-    def authenticate_user(self, name, password):
+    def authenticate_user(self, name, password, session=None):
+        if session is not None:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT user_id FROM sessions WHERE session_token = ?", (session,))
+            user_id = cursor.fetchone()
+            return user_id[0]
+
         if not name or not password:
             return None
         try:
@@ -230,13 +273,13 @@ class EarthquakeDatabase:
             logger.error(f"Error authenticating user: {e}")
             raise Exception(f"Error authenticating user: {e}")
 
-    def create_user(self, name, password):
+    def create_user(self, name, password, poll_name=None):
         if not name or not password:
             return None
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
-            cursor.execute("INSERT INTO users (name, password) VALUES (?, ?)", (name, password))
+            cursor.execute("INSERT INTO users (name, password, poll_name) VALUES (?, ?, ?)", (name, password, poll_name))
             user_id = cursor.lastrowid
             conn.commit()
             return True
@@ -265,9 +308,11 @@ class EarthquakeDatabase:
             conn = self._get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                SELECT session_token
-                FROM sessions
-                WHERE session_token = ? AND expiration_date > CURRENT_TIMESTAMP
+                SELECT s.session_token
+                FROM sessions s
+                JOIN users u ON s.user_id = u.id
+                WHERE s.session_token = ?
+                AND s.expiration_date > CURRENT_TIMESTAMP
             """, (session_token,))
             session = cursor.fetchone()
             return session is not None
@@ -275,7 +320,7 @@ class EarthquakeDatabase:
             logger.error(f"Error checking session: {e}")
             raise Exception(f"Error checking session: {e}")
 
-    def create_wa_message(self, phone_number, message_id):
+    def create_wa_message(self, phone_number, message_id, poll_name: str | None =None):
         if not phone_number or not message_id:
             return 0
 
@@ -294,9 +339,9 @@ class EarthquakeDatabase:
             now = datetime.utcnow().isoformat()
 
             cursor.execute('''
-                INSERT INTO wa_messages (id, wa_user_id, is_read, message, updated_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (message_id, wa_user_id, 0, None, now, now))
+                INSERT INTO wa_messages (id, wa_user_id, is_read, message, poll_name, updated_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (message_id, wa_user_id, 0, None, poll_name, now, now))
 
             conn.commit()
             return cursor.lastrowid
@@ -330,17 +375,33 @@ class EarthquakeDatabase:
             logger.error(f"Error updating WhatsApp message: {e}")
             raise Exception(f"Error updating WhatsApp message: {e}")
 
-    def get_wa_messages(self):
+    def get_wa_messages(self, user_id: int | None):
         try:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            wa_messages = cursor.execute('''
-                SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message, wa_messages.is_read as is_read, wa_messages.created_at as created_at
-                FROM wa_messages
-                JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
-                LIMIT 1000
+            poll_name = None
+            if user_id is not None:
+                cursor.execute("SELECT poll_name FROM users WHERE id = ?", (user_id,))
+                row = cursor.fetchone()
+                if row:
+                    poll_name = row['poll_name']
+
+            if poll_name is None:
+                wa_messages = cursor.execute('''
+                    SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message, wa_messages.is_read as is_read, wa_messages.created_at as created_at, wa_messages.poll_name as poll_name
+                    FROM wa_messages
+                    JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
+                    LIMIT 1000
                 ''')
+            else:
+                wa_messages = cursor.execute('''
+                    SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message, wa_messages.is_read as is_read, wa_messages.created_at as created_at
+                    FROM wa_messages
+                    JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
+                    WHERE wa_messages.poll_name = ?
+                    LIMIT 1000
+                ''', (poll_name,))
 
             return [dict(row) for row in wa_messages]
 
@@ -917,7 +978,7 @@ class EarthquakeDatabase:
             logger.error(f"Error deleting poll: {e}")
             raise Exception(f"Error deleting poll: {e}")
 
-    def create_wa_user(self, name: str, phone_number: str) -> int:
+    def create_wa_user(self, name: str, phone_number: str, poll_name: str | None) -> int:
         """
         Create a new WhatsApp user.
 
@@ -934,9 +995,9 @@ class EarthquakeDatabase:
 
             created_at = datetime.now().isoformat()
             cursor.execute('''
-            INSERT INTO wa_users (name, phone_number, created_at)
-            VALUES (?, ?, ?)
-            ''', (name, phone_number, created_at))
+            INSERT INTO wa_users (name, phone_number, poll_name, created_at)
+            VALUES (?, ?, ?, ?)
+            ''', (name, phone_number, poll_name, created_at))
 
             conn.commit()
             user_id = cursor.lastrowid
@@ -961,7 +1022,7 @@ class EarthquakeDatabase:
             cursor = conn.cursor()
 
             cursor.execute('''
-            SELECT id, name, phone_number, last_sent_at, created_at
+            SELECT id, name, phone_number, poll_name, last_sent_at, created_at
             FROM wa_users
             ORDER BY name
             ''')

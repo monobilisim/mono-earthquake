@@ -242,8 +242,8 @@ async def wa_callbackGet(request: Request):
 async def wa_callbackPost(request: Request):
     data = await request.json()
 
-    logger.info("Received WhatsApp callback")
-    logger.info(f"Request body: {data}")
+    #logger.info("Received WhatsApp callback")
+    #logger.info(f"Request body: {data}")
 
     value = data["entry"][0]["changes"][0]["value"]
 
@@ -284,7 +284,6 @@ async def wa_callbackPost(request: Request):
 @app.post("/wa_message_stats", tags=["Messages"])
 async def wa_message_stats(request: Request):
     body = await request.json()
-    logger.info(body)
 
     username = None
     password = None
@@ -303,6 +302,7 @@ async def wa_message_stats(request: Request):
     try:
         db = EarthquakeDatabase()
 
+        user_id = None
         session_token = None
         if not session:
             user_id = db.authenticate_user(username, password)
@@ -314,11 +314,12 @@ async def wa_message_stats(request: Request):
         if session:
             if db.check_session(session) is not True:
                 return JSONResponse(status_code=403, content={"message": "Invalid session token"})
+            user_id = db.authenticate_user(None, None, session)
 
-        rows = db.get_wa_messages()
+        rows = db.get_wa_messages(user_id)
 
-        if not rows:
-            return JSONResponse(status_code=404, content={"message": "No WhatsApp webhook statistics found"})
+        #if not rows:
+        #    return JSONResponse(status_code=404, content={"message": "No WhatsApp webhook statistics found"})
 
         if session:
             return JSONResponse(

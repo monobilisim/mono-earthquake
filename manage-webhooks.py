@@ -271,15 +271,16 @@ def show_help():
     """Display help information about this tool."""
     print("Earthquake API Webhook Management Tool")
     print("\nCommands:")
-    print("  help                           - Show this help message")
-    print("  add <type> <url> <name>        - Add a new webhook")
-    print("  remove <name>                  - Remove a webhook by name")
-    print("  list                           - List all webhooks")
-    print("  list <type>                    - List webhooks of a specific type")
-    print("  test <name>                    - Test a webhook by sending a test message")
-    print("  send <name>                    - Send latest earthquake data to a specific webhook")
-    print("  send                           - Send latest earthquake data to all webhooks")
-    print("  remove-last-earthquake         - Remove the last earthquake from the database")
+    print("  help                                      - Show this help message")
+    print("  add <type> <url> <name>                   - Add a new webhook")
+    print("  remove <name>                             - Remove a webhook by name")
+    print("  list                                      - List all webhooks")
+    print("  list <type>                               - List webhooks of a specific type")
+    print("  test <name>                               - Test a webhook by sending a test message")
+    print("  send <name>                               - Send latest earthquake data to a specific webhook")
+    print("  send                                      - Send latest earthquake data to all webhooks")
+    print("  remove-last-earthquake                    - Remove the last earthquake from the database")
+    print("  create-user <name> <password> <poll_name> - Create a new user with optional poll name")
     print("\nValid webhook types:")
     for t in VALID_WEBHOOK_TYPES:
         print(f"  - {t}")
@@ -344,8 +345,8 @@ def main():
                 db.close()
 
     elif command == "create-user":
-        if len(sys.argv) != 4:
-            print("Error: create-user command requires a name and password")
+        if len(sys.argv) < 3:
+            print("Error: create-user command requires a name and password and poll name (optional)")
             sys.exit(1)
 
         db = None
@@ -353,8 +354,11 @@ def main():
             db = EarthquakeDatabase()
             name = sys.argv[2]
             password = sys.argv[3]
+            poll_name = None
+            if len(sys.argv) > 4:
+                poll_name = sys.argv[4]
 
-            db.create_user(name, password)
+            db.create_user(name, password, poll_name)
             print(f"User '{name}' with password '{password}' created successfully.")
         except Exception as e:
             print(f"Error creating user: {e}", file=sys.stderr)

@@ -6,6 +6,8 @@
     let error = $state("");
     let sessionToken = $state("");
     let session = $state("");
+    let didLogin = $state(false);
+    let sessionLoginError = $state(false);
 
     session =
         document.cookie
@@ -24,11 +26,13 @@
             });
 
             if (!response.ok) {
+                sessionLoginError = true;
                 throw new Error("Login failed");
             }
 
             const data = await response.json();
             messageRows = data.data || [];
+            didLogin = true;
         }
     }
 
@@ -57,6 +61,7 @@
             const data = await response.json();
             messageRows = data.data || [];
             sessionToken = data.session_token;
+            didLogin = true;
 
             if (sessionToken) {
                 document.cookie = `session=${sessionToken}; path=/; secure; SameSite=None`;
@@ -67,13 +72,25 @@
             loading = false;
         }
     }
+
+    async function logout() {
+        document.cookie =
+            "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; SameSite=None";
+        window.location.href = "/";
+    }
 </script>
 
 <main>
-    {#if messageRows.length > 0}
+    {#if messageRows.length > 0 || (didLogin && messageRows.length === 0)}
         <div class="container">
             <div class="header">
                 <h1>WhatsApp Message Statistics</h1>
+                <button
+                    class="logout-button"
+                    onclick={() => {
+                        logout();
+                    }}>Logout</button
+                >
             </div>
 
             <div class="table-container">
@@ -85,6 +102,9 @@
                             <th>Message</th>
                             <th>Status</th>
                             <th>Created At</th>
+                            {#if messageRows[0]?.poll_name}
+                                <th>Poll Name</th>
+                            {/if}
                         </tr>
                     </thead>
                     <tbody>
@@ -119,13 +139,21 @@
                                         row.created_at.replace(" ", "T") + "Z",
                                     ).toLocaleString()}</td
                                 >
+                                {#if row?.poll_name}
+                                    <td>
+                                        <span>{row.poll_name}</span>
+                                    </td>
+                                {/if}
                             </tr>
                         {/each}
                     </tbody>
                 </table>
+                {#if messageRows.length === 0 && didLogin}
+                    <div class="no-data">No messages found.</div>
+                {/if}
             </div>
         </div>
-    {:else}
+    {:else if session === "" || sessionLoginError === true}
         <div class="login-container">
             <div class="login-form">
                 <h2>Admin Login</h2>
@@ -182,13 +210,32 @@
         overflow: hidden;
     }
 
+    .no-data {
+        padding: 20px;
+        text-align: center;
+        color: #6c757d;
+        font-size: 16px;
+    }
+
     .header {
         display: flex;
-        justify-content: space-between;
+        justify-content: justify-between;
         align-items: center;
         padding: 20px 30px;
         background: #25d366;
         color: white;
+    }
+
+    .logout-button {
+        background: #ff4d4d;
+        color: white;
+        border: none;
+        width: 120px;
+        padding: 10px 20px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-left: auto;
+        transition: background-color 0.2s;
     }
 
     .header h1 {

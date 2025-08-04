@@ -83,11 +83,11 @@ def list_polls():
     finally:
         db.close()
 
-def add_wa_user(name, phone_number):
+def add_wa_user(name, phone_number, poll_name=None):
     """Add a new WhatsApp user to the database."""
     db = EarthquakeDatabase()
     try:
-        user_id = db.create_wa_user(name, phone_number)
+        user_id = db.create_wa_user(name, phone_number, poll_name)
         print(f"Successfully added WhatsApp user '{name}' with ID {user_id}")
     except Exception as e:
         print(f"Error adding WhatsApp user: {e}", file=sys.stderr)
@@ -136,7 +136,7 @@ def list_wa_users():
             print("No WhatsApp users found")
             return
 
-        print(f"{'ID':<5} {'Name':<20} {'Phone Number':<20} {'Last Sent':<20} {'Created':<20}")
+        print(f"{'ID':<5} {'Name':<20} {'Phone Number':<20} {'Poll':<20} {'Last Sent':<20} {'Created':<20}")
         print("-" * 90)
 
         for user in users:
@@ -150,7 +150,7 @@ def list_wa_users():
                 except:
                     pass
 
-            print(f"{user['id']:<5} {user['name']:<20} {user['phone_number']:<20} {last_sent:<20} {created_at:<20}")
+            print(f"{user['id']:<5} {user['name']:<20} {user['phone_number']:<20} {user['poll_name']:<20} {last_sent:<20} {created_at:<20}")
 
     except Exception as e:
         print(f"Error listing WhatsApp users: {e}", file=sys.stderr)
@@ -248,7 +248,7 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
 
         if response.status_code == 200:
             db.update_wa_user_last_sent(phone_number)
-            db.create_wa_message(phone_number, response.json()['messages'][0]['id'])
+            db.create_wa_message(phone_number, response.json()['messages'][0]['id'], poll['name'])
             print(f"Successfully sent template to {user_name} ({phone_number})")
             return True
         else:
@@ -278,7 +278,7 @@ def show_help():
     print("  add-poll <type> <name> [min_magnitude] - Add a new poll")
     print("  remove-poll <name>                     - Remove a poll by name")
     print("  list-polls                             - List all polls")
-    print("  add-wa-user <name> <phone_number>      - Add a WhatsApp user")
+    print("  add-wa-user <name> <phone_number> <poll_name>     - Add a WhatsApp user")
     print("  remove-wa-user <phone_number>          - Remove a WhatsApp user")
     print("  list-wa-users                          - List all WhatsApp users")
     print("  send-template <poll_name>              - Send WhatsApp template for a poll")
@@ -286,9 +286,9 @@ def show_help():
     for t in VALID_POLL_TYPES:
         print(f"  - {t}")
     print("\nExamples:")
-    print("  python manage-polls.py add-poll earthquake daily_alerts 2.5")
-    print("  python manage-polls.py add-wa-user \"John Doe\" \"+1234567890\"")
-    print("  python manage-polls.py send-template daily_alerts")
+    print("  python manage-polls.py add-poll whatsapp company1 2.5")
+    print("  python manage-polls.py add-wa-user \"John Doe\" 905554444 company1")
+    print("  python manage-polls.py send-template company1")
 
 def main():
     """Parse arguments and dispatch to appropriate function."""
@@ -320,10 +320,14 @@ def main():
     elif command == "list-polls" and len(sys.argv) == 2:
         list_polls()
 
-    elif command == "add-wa-user" and len(sys.argv) == 4:
+    elif command == "add-wa-user" and len(sys.argv) == 4 or len(sys.argv) == 5:
         name = sys.argv[2]
         phone_number = sys.argv[3]
-        add_wa_user(name, phone_number)
+        poll_name = None
+        if sys.argv[4] is not None:
+            poll_name = sys.argv[4]
+
+        add_wa_user(name, phone_number, poll_name)
 
     elif command == "remove-wa-user" and len(sys.argv) == 3:
         phone_number = sys.argv[2]
