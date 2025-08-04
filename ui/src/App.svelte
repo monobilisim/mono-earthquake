@@ -1,13 +1,22 @@
 <script lang="ts">
     let username = $state("");
     let password = $state("");
-    let messageRows = $state([]);
+    let messageRows: MessageRow[] = $state([]);
     let loading = $state(false);
     let error = $state("");
     let sessionToken = $state("");
     let session = $state("");
     let didLogin = $state(false);
     let sessionLoginError = $state(false);
+
+    type MessageRow = {
+        name: string;
+        number: string;
+        message?: string;
+        is_read: boolean;
+        created_at: string;
+        poll_name?: string;
+    };
 
     session =
         document.cookie

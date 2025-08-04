@@ -37,7 +37,7 @@ def send_wa_template(poll_name, earthquake_data):
 
         print(f"Sending template for earthquake magnitude {magnitude} (poll threshold: {poll['min_magnitude']})")
 
-        users = db.get_wa_users()
+        users = db.get_wa_users(poll_name)
         if not users:
             print("No WhatsApp users found")
             return

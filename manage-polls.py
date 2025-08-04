@@ -183,7 +183,7 @@ def send_wa_template(poll_name, earthquake_data=None):
             return
 
         # Get all WhatsApp users
-        users = db.get_wa_users()
+        users = db.get_wa_users(poll['name'])
         if not users:
             print("No WhatsApp users found")
             return

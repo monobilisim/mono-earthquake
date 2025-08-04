@@ -1010,7 +1010,7 @@ class EarthquakeDatabase:
             logger.error(f"Error creating WhatsApp user: {e}")
             raise Exception(f"Error creating WhatsApp user: {e}")
 
-    def get_wa_users(self) -> List[Dict[str, Any]]:
+    def get_wa_users(self, poll_name: str | None = None) -> List[Dict[str, Any]]:
         """
         Get all WhatsApp users.
 
@@ -1021,11 +1021,19 @@ class EarthquakeDatabase:
             conn = self._get_connection()
             cursor = conn.cursor()
 
-            cursor.execute('''
-            SELECT id, name, phone_number, poll_name, last_sent_at, created_at
-            FROM wa_users
-            ORDER BY name
-            ''')
+            if poll_name is None:
+                cursor.execute('''
+                    SELECT id, name, phone_number, poll_name, last_sent_at, created_at
+                    FROM wa_users
+                    ORDER BY name
+                ''')
+            else:
+                cursor.execute('''
+                    SELECT id, name, phone_number, poll_name, last_sent_at, created_at
+                    FROM wa_users
+                    WHERE poll_name = ?
+                    ORDER BY name
+                ''', (poll_name,))
 
             users = cursor.fetchall()
             return [self.convert_row_to_dict(user) for user in users]

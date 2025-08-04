@@ -14,7 +14,6 @@ from parser import KoeriParser
 from typing import Optional
 from load_dotenv import load_dotenv
 from webhooks import discord, zulip, whatsapp, generic
-from polls_processor import process_whatsapp_webhook, get_template_statistics, is_polls_related_webhook
 from polls import send_wa_template
 from fastapi.staticfiles import StaticFiles
 from database import EarthquakeDatabase

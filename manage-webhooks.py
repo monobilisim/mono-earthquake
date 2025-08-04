@@ -3,7 +3,6 @@ import sys
 from datetime import datetime
 from pathlib import Path
 from database import EarthquakeDatabase
-
 from webhooks import discord, zulip, whatsapp, generic
 
 # Define valid webhook types
