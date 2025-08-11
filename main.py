@@ -22,12 +22,18 @@ load_dotenv()
 
 LOGGING = bool(str(os.getenv("LOGGING")))
 
+WA_NUMBER_ID = str(os.getenv("WA_NUMBER_ID"))
+WA_API_TOKEN = str(os.getenv("WA_API_TOKEN"))
+
 if LOGGING == True:
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 logger = logging.getLogger(__name__)
+
+if not WA_NUMBER_ID or not WA_API_TOKEN:
+    logger.error("WhatsApp API credentials are not set. Please set WA_NUMBER_ID and WA_API_TOKEN environment variables.")
 
 app = FastAPI(
     title="KOERI Earthquake Data API",

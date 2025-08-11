@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TypedDict
 from datetime import datetime, timedelta
 import threading
 import logging
@@ -131,7 +131,7 @@ class EarthquakeDatabase:
             CREATE TABLE IF NOT EXISTS wa_users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(255) NOT NULL,
-                phone_number VARCHAR(20) NOT NULL UNIQUE,
+                phone_number VARCHAR(20) NOT NULL,
                 poll_name VARCHAR(255) DEFAULT NULL,
                 last_sent_at DATETIME,
                 created_at TEXT NOT NULL
@@ -923,7 +923,15 @@ class EarthquakeDatabase:
             logger.error(f"Error fetching polls: {e}")
             raise Exception(f"Error fetching polls: {e}")
 
-    def get_poll_by_name(self, name: str) -> Optional[Dict[str, Any]]:
+    PollType = TypedDict("PollType", {
+        "id": int,
+        "name": str,
+        "type": str,
+        "min_magnitude": float,
+        "created_at": str
+    })
+
+    def get_poll_by_name(self, name: str) -> PollType | None:
         """
         Get a specific poll by name.
 

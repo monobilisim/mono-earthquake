@@ -1,20 +1,23 @@
 import os
 import sys
+from typing import TypedDict
 import requests
 from datetime import datetime
 from database import EarthquakeDatabase
+from load_dotenv import load_dotenv
 
-WA_NUMBER_ID = os.getenv('WA_NUMBER_ID')
-WA_API_TOKEN = os.getenv('WA_API_TOKEN')
-TEMPLATE_NAME = os.getenv('TEMPLATE_NAME')
-TEMPLATE_LANGUAGE = os.getenv('TEMPLATE_LANGUAGE')
+load_dotenv()
+
+WA_NUMBER_ID = str(os.getenv('WA_NUMBER_ID'))
+WA_API_TOKEN = str(os.getenv('WA_API_TOKEN'))
+TEMPLATE_NAME = str(os.getenv('TEMPLATE_NAME'))
+TEMPLATE_LANGUAGE = str(os.getenv('TEMPLATE_LANGUAGE'))
 
 def send_wa_template(poll_name, earthquake_data):
     """Send WhatsApp template to users based on poll configuration."""
 
     if not WA_NUMBER_ID or not WA_API_TOKEN:
         print("Error: WA_NUMBER_ID and WA_API_TOKEN environment variables must be set")
-        sys.exit(1)
 
     db = EarthquakeDatabase()
 
@@ -22,7 +25,6 @@ def send_wa_template(poll_name, earthquake_data):
         poll = db.get_poll_by_name(poll_name)
         if not poll:
             print(f"Error: No poll found with name '{poll_name}'")
-            sys.exit(1)
 
         poll_name = poll['name']
 
@@ -51,7 +53,6 @@ def send_wa_template(poll_name, earthquake_data):
 
     except Exception as e:
         print(f"Error sending WhatsApp flows: {e}", file=sys.stderr)
-        sys.exit(1)
     finally:
         if db:
             db.close()

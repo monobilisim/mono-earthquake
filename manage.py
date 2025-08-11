@@ -379,7 +379,7 @@ def poll_add_wa_user(name, phone_number, poll_name=None):
     finally:
         db.close()
 
-def poll_remove_wa_user(phone_number):
+def poll_remove_wa_user(phone_number, poll_name=None):
     """Remove a WhatsApp user from the database by phone number."""
     db = EarthquakeDatabase()
     try:
@@ -393,11 +393,15 @@ def poll_remove_wa_user(phone_number):
             print(f"Error: No WhatsApp user found with phone number '{phone_number}'")
             sys.exit(1)
 
-        cursor.execute('DELETE FROM wa_users WHERE phone_number = ?', (phone_number,))
+        cursor.execute('DELETE FROM wa_users WHERE phone_number = ? AND poll_name = ?', (phone_number, poll_name))
+
         conn.commit()
 
         if cursor.rowcount > 0:
-            print(f"Successfully removed WhatsApp user with phone number '{phone_number}'")
+            if poll_name:
+                print(f"Successfully removed WhatsApp user with phone number '{phone_number}' from poll '{poll_name}'")
+            else:
+                print(f"Successfully removed WhatsApp user with phone number '{phone_number}'")
         else:
             print(f"Error: Failed to remove WhatsApp user with phone number '{phone_number}'")
             sys.exit(1)
@@ -450,7 +454,7 @@ def poll_help():
     print("  list                                      - List all polls")
     print("  send-template <poll_name>                 - Send WhatsApp template for a poll")
     print("  add-wa-user <name> <phone> [poll_name]    - Add a WhatsApp user")
-    print("  remove-wa-user <phone_number>             - Remove a WhatsApp user")
+    print("  remove-wa-user <phone_number> [poll_name] - Remove a WhatsApp user")
     print("  list-wa-users                             - List all WhatsApp users")
     print(f"\nValid poll types: {', '.join(VALID_POLL_TYPES)}")
     print("\nExamples:")
@@ -640,8 +644,16 @@ def main():
                 print("Error: remove-wa-user command requires phone number")
                 poll_help()
                 sys.exit(1)
+
             phone_number = sys.argv[3]
-            poll_remove_wa_user(phone_number)
+
+            poll_name = None
+            if len(sys.argv) > 4:
+                poll_name = sys.argv[4]
+            if poll_name:
+                poll_remove_wa_user(phone_number, poll_name)
+            else:
+                poll_remove_wa_user(phone_number)
 
         elif command == "list-wa-users":
             poll_list_wa_users()
