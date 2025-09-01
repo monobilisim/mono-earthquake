@@ -274,8 +274,6 @@ async def wa_callbackPost(request: Request):
         if message is not None:
             db.update_wa_message(id, True, message)
 
-        db.clear_old_wa_messages()
-
     except Exception as e:
         logger.error(f"Error updating WhatsApp message status in database: {str(e)}")
 
@@ -349,6 +347,49 @@ async def wa_message_stats(request: Request):
         return JSONResponse(
             status_code=500,
             content={"message": f"Error fetching WhatsApp webhook statistics: {str(e)}"}
+        )
+
+    finally:
+        if db:
+            db.close()
+
+@app.post("/wa_message_stats_full", tags=["Messages"])
+async def wa_message_stats_full(request: Request):
+    body = await request.json()
+
+    session = None
+    if body.get("session") is not None:
+        session = body.get("session")
+
+    if not session:
+        return Response(status_code=400, content="No session token provided")
+
+    db = None
+    try:
+        db = EarthquakeDatabase()
+
+        user_id = None
+        if session:
+            if db.check_session(session) is not True:
+                return JSONResponse(status_code=403, content={"message": "Invalid session token"})
+            user_id = db.authenticate_user(None, None, session)
+
+        if user_id is None:
+            return JSONResponse(status_code=403, content={"message": "Invalid session token"})
+
+        rows = db.get_wa_messages_stats_full(user_id)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "data": rows,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error in wa_message_stats_full: {str(e)}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Error fetching WhatsApp full statistics: {str(e)}"}
         )
 
     finally:

@@ -85,7 +85,13 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
                         "parameters": [
                             {
                                 "type": "text",
-                                "text": user_name  # {{1}} parameter
+                                "parameter_name": "adsoyad",
+                                "text": user_name
+                            },
+                            {
+                                "type": "text",
+                                "parameter_name": "detay",
+                                "text": f"{location} merkezli {magnitude} boyutunda"
                             }
                         ]
                     }
@@ -111,6 +117,7 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
             return True
         else:
             print(f"Failed to send template to {user_name} ({phone_number}): {response.status_code} - {response.text}")
+            db.create_wa_messages_failed(phone_number, f"API responded with {response.status_code}", poll['name'])
             return False
 
     except Exception as e:

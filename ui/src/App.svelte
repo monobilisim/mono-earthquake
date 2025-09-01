@@ -8,6 +8,12 @@
     let session = $state("");
     let didLogin = $state(false);
     let sessionLoginError = $state(false);
+    let pollNames: string[] = $state([]);
+    let selectedPoll = $state("");
+    let currentPage = $state("home");
+    let stats = $state({});
+
+    import Stats from "./lib/Stats.svelte"
 
     type MessageRow = {
         name: string;
@@ -87,114 +93,186 @@
             "session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; Secure; SameSite=None";
         window.location.href = "/";
     }
+
+    function getPollNames(): void {
+        const pollNamesSet = new Set<string>();
+        messageRows.forEach((row) => {
+            if (row.poll_name) {
+                pollNamesSet.add(row.poll_name);
+            }
+        });
+        pollNames = Array.from(pollNamesSet);
+    }
+
+    $effect(() => {
+        if (messageRows.length > 0) {
+            getPollNames();
+        }
+
+        if (session) {
+          (async () => {
+          const statsResponse = await fetch("/wa_message_stats_full", { method: "POST", body: JSON.stringify({ session })});
+          if (statsResponse.ok) {
+            stats = await statsResponse.json();
+            stats = stats.data;
+            console.log(stats);
+          }
+          })();
+        }
+    });
+
+    let shownMessageRows: MessageRow[] = $derived(
+        selectedPoll === ""
+            ? messageRows
+            : messageRows.filter((row) => row.poll_name === selectedPoll),
+    );
 </script>
 
 <main>
-    {#if messageRows.length > 0 || (didLogin && messageRows.length === 0)}
-        <div class="container">
-            <div class="header">
-                <h1>WhatsApp Message Statistics</h1>
-                <button
-                    class="logout-button"
-                    onclick={() => {
-                        logout();
-                    }}>Logout</button
-                >
-            </div>
+    <div id="main-content">
+        {#if messageRows.length > 0 || (didLogin && messageRows.length === 0)}
+            <div class="container">
+                <div class="header">
+                    <h1>WhatsApp Message Statistics</h1>
+                    <div class="logout-div">
+                        {#if currentPage === "stats"}
+                            <a class="stats" onclick={currentPage = "home"}>home</a>
+                        {:else}
+                            <a class="stats" onclick={currentPage = "stats"}>stats</a>
+                        {/if}
 
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Phone Number</th>
-                            <th>Message</th>
-                            <th>Status</th>
-                            <th>Created At</th>
-                            {#if messageRows[0]?.poll_name}
-                                <th>Poll Name</th>
-                            {/if}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {#each messageRows as row, index}
+                        {#if messageRows[0]?.poll_name}
+                            <select
+                                bind:value={selectedPoll}
+                                class="poll-select"
+                            >
+                                <option value="">All Polls</option>
+                                {#if pollNames.length > 0}
+                                    {#each pollNames as pollName}
+                                        <option value={pollName}
+                                            >{pollName}</option
+                                        >
+                                    {/each}
+                                {/if}
+                            </select>
+                        {/if}
+
+                        <button
+                            class="logout-button"
+                            onclick={() => {
+                                logout();
+                            }}>Logout</button
+                        >
+                    </div>
+                </div>
+
+                {#if currentPage === "home"}
+                <div class="table-container">
+                    <table>
+                        <thead>
                             <tr>
-                                <td>{row.name}</td>
-                                <td>{row.number}</td>
-                                <td class="message-cell">
-                                    {#if row.message}
-                                        <span class="message"
-                                            >{row.message}</span
-                                        >
-                                    {:else}
-                                        <span class="no-message"
-                                            >No response</span
-                                        >
-                                    {/if}
-                                </td>
-                                <td>
-                                    {#if row.is_read}
-                                        <span class="status responded"
-                                            >Read</span
-                                        >
-                                    {:else}
-                                        <span class="status no-response"
-                                            >Not Read</span
-                                        >
-                                    {/if}
-                                </td>
-                                <td
-                                    >{new Date(
-                                        row.created_at.replace(" ", "T") + "Z",
-                                    ).toLocaleString()}</td
-                                >
-                                {#if row?.poll_name}
-                                    <td>
-                                        <span>{row.poll_name}</span>
-                                    </td>
+                                <th>Name</th>
+                                <th>Phone Number</th>
+                                <th>Message</th>
+                                <th>Status</th>
+                                <th>Created At</th>
+                                {#if messageRows[0]?.poll_name}
+                                    <th>Poll Name</th>
                                 {/if}
                             </tr>
-                        {/each}
-                    </tbody>
-                </table>
-                {#if messageRows.length === 0 && didLogin}
-                    <div class="no-data">No messages found.</div>
-                {/if}
-            </div>
-        </div>
-    {:else if session === "" || sessionLoginError === true}
-        <div class="login-container">
-            <div class="login-form">
-                <h2>Admin Login</h2>
-                <form onsubmit={handleSubmit}>
-                    <div class="form-group">
-                        <input
-                            type="text"
-                            placeholder="Username"
-                            bind:value={username}
-                            disabled={loading}
-                            required
-                        />
-                    </div>
-                    <div class="form-group">
-                        <input
-                            type="password"
-                            placeholder="Password"
-                            bind:value={password}
-                            disabled={loading}
-                            required
-                        />
-                    </div>
-                    {#if error}
-                        <div class="error">{error}</div>
+                        </thead>
+                        <tbody>
+                            {#each shownMessageRows as row, index}
+                                <tr>
+                                    <td>{row.name}</td>
+                                    <td>{row.number}</td>
+                                    <td class="message-cell">
+                                        {#if row.message}
+                                            <span class="message"
+                                                >{row.message}</span
+                                            >
+                                        {:else}
+                                            <span class="no-message"
+                                                >No response</span
+                                            >
+                                        {/if}
+                                    </td>
+                                    <td>
+                                        {#if row.is_read}
+                                            <span class="status responded"
+                                                >Read</span
+                                            >
+                                        {:else}
+                                            <span class="status no-response"
+                                                >Not Read</span
+                                            >
+                                        {/if}
+                                    </td>
+                                    <td
+                                        >{new Date(
+                                            row.created_at.replace(" ", "T") +
+                                                "Z",
+                                        ).toLocaleString()}</td
+                                    >
+                                    {#if row?.poll_name}
+                                        <td>
+                                            <span>{row.poll_name}</span>
+                                        </td>
+                                    {/if}
+                                </tr>
+                            {/each}
+                        </tbody>
+                    </table>
+                    {#if messageRows.length === 0 && didLogin}
+                        <div class="no-data">No messages found.</div>
                     {/if}
-                    <button type="submit" disabled={loading}>
-                        {loading ? "Logging in..." : "Login"}
-                    </button>
-                </form>
+                </div>
+                {/if}
+
+                {#if currentPage === "stats"}
+                    {#if stats}
+                        <Stats {stats} {selectedPoll} />
+                    {:else}
+                        <div class="no-data">No stats available.</div>
+                    {/if}
+                {/if}
+
             </div>
-        </div>
-    {/if}
+
+        {:else if session === "" || sessionLoginError === true}
+            <div class="login-container">
+                <div class="login-form">
+                    <h2>Admin Login</h2>
+                    <form onsubmit={handleSubmit}>
+                        <div class="form-group">
+                            <input
+                                type="text"
+                                placeholder="Username"
+                                bind:value={username}
+                                disabled={loading}
+                                required
+                            />
+                        </div>
+                        <div class="form-group">
+                            <input
+                                type="password"
+                                placeholder="Password"
+                                bind:value={password}
+                                disabled={loading}
+                                required
+                            />
+                        </div>
+                        {#if error}
+                            <div class="error">{error}</div>
+                        {/if}
+                        <button type="submit" disabled={loading}>
+                            {loading ? "Logging in..." : "Login"}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        {/if}
+    </div>
 </main>
 
 <style>
@@ -206,13 +284,22 @@
     }
 
     main {
-        min-height: 100vh;
-        padding: 20px;
+        height: 100vh;
+        width: 100vw;
+        display: flex;
+        justify-content: center;
+        padding: 16px;
+        padding-top: 32px;
+        padding-left: 0;
+    }
+
+    #main-content {
+        width: 95%;
+        overflow-x: hidden;
     }
 
     .container {
         width: 100%;
-        margin: 8px;
         background: white;
         border-radius: 8px;
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
@@ -233,6 +320,33 @@
         padding: 20px 30px;
         background: #25d366;
         color: white;
+    }
+
+    .logout-div {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
+    }
+
+    .stats {
+        color: black;
+        background: white;
+        padding: 8px 12px;
+        border-radius: 4px;
+        border: none;
+        font-size: 14px;
+        margin-right: 15px;
+        cursor: pointer;
+    }
+
+    .poll-select {
+        background: white;
+        padding: 8px 12px;
+        border-radius: 4px;
+        border: none;
+        font-size: 14px;
+        margin-right: 15px;
+        cursor: pointer;
     }
 
     .logout-button {

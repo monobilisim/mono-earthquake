@@ -151,6 +151,16 @@ class EarthquakeDatabase:
             ''')
 
             cursor.execute('''
+            CREATE TABLE IF NOT EXISTS wa_messages_failed (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wa_user_id INTEGER NOT NULL,
+                poll_name VARCHAR(255) DEFAULT NULL,
+                reason TEXT,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+
+            cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(255) NOT NULL UNIQUE,
@@ -209,46 +219,46 @@ class EarthquakeDatabase:
             logger.error(f"Error initializing database schema: {e}")
             raise Exception(f"Error initializing database schema: {e}")
 
-    def clear_old_wa_messages(self):
-        try:
-            conn = self._get_connection()
-            cursor = conn.cursor()
+    # def clear_old_wa_messages(self):
+    #     try:
+    #         conn = self._get_connection()
+    #         cursor = conn.cursor()
 
-            # Get all messages - no join needed since poll_name is in wa_messages
-            cursor.execute('''
-                SELECT id, poll_name, wa_user_id, created_at
-                FROM wa_messages
-                ORDER BY poll_name, wa_user_id, created_at DESC
-            ''')
-            all_messages = cursor.fetchall()
+    #         # Get all messages - no join needed since poll_name is in wa_messages
+    #         cursor.execute('''
+    #             SELECT id, poll_name, wa_user_id, created_at
+    #             FROM wa_messages
+    #             ORDER BY poll_name, wa_user_id, created_at DESC
+    #         ''')
+    #         all_messages = cursor.fetchall()
 
-            # Group messages by (poll_name, wa_user_id) and keep only the latest
-            messages_to_keep = set()
-            seen_combinations = set()
+    #         # Group messages by (poll_name, wa_user_id) and keep only the latest
+    #         messages_to_keep = set()
+    #         seen_combinations = set()
 
-            for msg_id, poll_name, wa_user_id, created_at in all_messages:
-                combination = (poll_name, wa_user_id)
-                if combination not in seen_combinations:
-                    messages_to_keep.add(msg_id)
-                    seen_combinations.add(combination)
+    #         for msg_id, poll_name, wa_user_id, created_at in all_messages:
+    #             combination = (poll_name, wa_user_id)
+    #             if combination not in seen_combinations:
+    #                 messages_to_keep.add(msg_id)
+    #                 seen_combinations.add(combination)
 
-            # Delete messages not in the keep set
-            if messages_to_keep:
-                placeholders = ','.join('?' * len(messages_to_keep))
-                cursor.execute(f'''
-                    DELETE FROM wa_messages
-                    WHERE id NOT IN ({placeholders})
-                ''', list(messages_to_keep))
-            else:
-                cursor.execute('DELETE FROM wa_messages')
+    #         # Delete messages not in the keep set
+    #         if messages_to_keep:
+    #             placeholders = ','.join('?' * len(messages_to_keep))
+    #             cursor.execute(f'''
+    #                 DELETE FROM wa_messages
+    #                 WHERE id NOT IN ({placeholders})
+    #             ''', list(messages_to_keep))
+    #         else:
+    #             cursor.execute('DELETE FROM wa_messages')
 
-            deleted_count = cursor.rowcount
-            conn.commit()
-            logger.info(f"Cleared {deleted_count} WhatsApp messages, keeping last message per user per poll")
+    #         deleted_count = cursor.rowcount
+    #         conn.commit()
+    #         logger.info(f"Cleared {deleted_count} WhatsApp messages, keeping last message per user per poll")
 
-        except sqlite3.Error as e:
-            logger.error(f"Error clearing old WhatsApp messages: {e}")
-            raise Exception(f"Error clearing old WhatsApp messages: {e}")
+    #     except sqlite3.Error as e:
+    #         logger.error(f"Error clearing old WhatsApp messages: {e}")
+    #         raise Exception(f"Error clearing old WhatsApp messages: {e}")
 
     def authenticate_user(self, name, password, session=None):
         if session is not None:
@@ -350,6 +360,154 @@ class EarthquakeDatabase:
             logger.error(f"Error creating WhatsApp message: {e}")
             raise Exception(f"Error creating WhatsApp message: {e}")
 
+    def create_wa_messages_failed(self, phone_number, reason, poll_name: str | None = None):
+        if not phone_number:
+            return 0
+
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT id FROM wa_users WHERE phone_number = ?", (phone_number,))
+            user = cursor.fetchone()
+            if not user:
+                logger.error(f"No wa_user found for phone number: {phone_number}")
+                return 0
+
+            wa_user_id = user[0]
+
+            cursor.execute('''
+                INSERT INTO wa_messages_failed (wa_user_id, reason, poll_name)
+                VALUES (?, ?, ?)
+            ''', (wa_user_id, reason, poll_name))
+
+            conn.commit()
+            return cursor.lastrowid
+
+        except sqlite3.Error as e:
+            logger.error(f"Error creating WhatsApp message: {e}")
+            raise Exception(f"Error creating WhatsApp message: {e}")
+
+    def get_wa_messages_stats_full(self, user_id: int):
+        try:
+            conn = self._get_connection()
+            cursor = conn.cursor()
+
+            poll_name = None
+            smtm = cursor.execute('''
+                SELECT poll_name FROM users WHERE id = ?
+                ''', (user_id,))
+            result = smtm.fetchone()
+            if result:
+                poll_name = result[0]
+
+            stats = {}
+
+            if poll_name is None:
+                cursor.execute('''
+                    SELECT
+                        poll_name,
+                        COUNT(*) as total_messages,
+                        SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) as read_messages,
+                        SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) as unread_messages,
+                        SUM(CASE WHEN DATE(created_at) = DATE('now') THEN 1 ELSE 0 END) as daily_successful,
+                        SUM(CASE WHEN DATE(created_at) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as weekly_successful,
+                        SUM(CASE WHEN DATE(created_at) >= DATE('now', '-30 days') THEN 1 ELSE 0 END) as monthly_successful
+                    FROM wa_messages
+                    GROUP BY poll_name
+                ''')
+                successful_stats = cursor.fetchall()
+
+                cursor.execute('''
+                    SELECT
+                        poll_name,
+                        COUNT(*) as total_failed,
+                        SUM(CASE WHEN DATE(updated_at) = DATE('now') THEN 1 ELSE 0 END) as daily_failed,
+                        SUM(CASE WHEN DATE(updated_at) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as weekly_failed,
+                        SUM(CASE WHEN DATE(updated_at) >= DATE('now', '-30 days') THEN 1 ELSE 0 END) as monthly_failed
+                    FROM wa_messages_failed
+                    GROUP BY poll_name
+                ''')
+                failed_stats = cursor.fetchall()
+
+                for row in successful_stats:
+                    poll = row[0] if row[0] else 'no_poll'
+                    stats[poll] = {
+                        'total_messages': row[1],
+                        'read_messages': row[2],
+                        'unread_messages': row[3],
+                        'daily_successful': row[4],
+                        'weekly_successful': row[5],
+                        'monthly_successful': row[6],
+                        'total_failed': 0,
+                        'daily_failed': 0,
+                        'weekly_failed': 0,
+                        'monthly_failed': 0
+                    }
+
+                for row in failed_stats:
+                    poll = row[0] if row[0] else 'no_poll'
+                    if poll not in stats:
+                        stats[poll] = {
+                            'total_messages': 0,
+                            'read_messages': 0,
+                            'unread_messages': 0,
+                            'daily_successful': 0,
+                            'weekly_successful': 0,
+                            'monthly_successful': 0
+                        }
+                    stats[poll].update({
+                        'total_failed': row[1],
+                        'daily_failed': row[2],
+                        'weekly_failed': row[3],
+                        'monthly_failed': row[4]
+                    })
+
+            else:
+                cursor.execute('''
+                    SELECT
+                        COUNT(*) as total_messages,
+                        SUM(CASE WHEN is_read = 1 THEN 1 ELSE 0 END) as read_messages,
+                        SUM(CASE WHEN is_read = 0 THEN 1 ELSE 0 END) as unread_messages,
+                        SUM(CASE WHEN DATE(created_at) = DATE('now') THEN 1 ELSE 0 END) as daily_successful,
+                        SUM(CASE WHEN DATE(created_at) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as weekly_successful,
+                        SUM(CASE WHEN DATE(created_at) >= DATE('now', '-30 days') THEN 1 ELSE 0 END) as monthly_successful
+                    FROM wa_messages
+                    WHERE poll_name = ?
+                ''', (poll_name,))
+                successful_row = cursor.fetchone()
+
+                cursor.execute('''
+                    SELECT
+                        COUNT(*) as total_failed,
+                        SUM(CASE WHEN DATE(updated_at) = DATE('now') THEN 1 ELSE 0 END) as daily_failed,
+                        SUM(CASE WHEN DATE(updated_at) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as weekly_failed,
+                        SUM(CASE WHEN DATE(updated_at) >= DATE('now', '-30 days') THEN 1 ELSE 0 END) as monthly_failed
+                    FROM wa_messages_failed
+                    WHERE poll_name = ?
+                ''', (poll_name,))
+                failed_row = cursor.fetchone()
+
+                stats[poll_name] = {
+                    'total_messages': successful_row[0] if successful_row else 0,
+                    'read_messages': successful_row[1] if successful_row else 0,
+                    'unread_messages': successful_row[2] if successful_row else 0,
+                    'daily_successful': successful_row[3] if successful_row else 0,
+                    'weekly_successful': successful_row[4] if successful_row else 0,
+                    'monthly_successful': successful_row[5] if successful_row else 0,
+                    'total_failed': failed_row[0] if failed_row else 0,
+                    'daily_failed': failed_row[1] if failed_row else 0,
+                    'weekly_failed': failed_row[2] if failed_row else 0,
+                    'monthly_failed': failed_row[3] if failed_row else 0
+                }
+
+            conn.close()
+            return stats
+
+        except sqlite3.Error as e:
+            logger.error(f"Error fetching WhatsApp messages stats: {e}")
+            raise Exception(f"Error fetching WhatsApp messages stats: {e}")
+
     def update_wa_message(self, message_id, is_read = False, message = None):
         if not message_id:
             return 0
@@ -389,17 +547,40 @@ class EarthquakeDatabase:
 
             if poll_name is None:
                 wa_messages = cursor.execute('''
-                    SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message, wa_messages.is_read as is_read, wa_messages.created_at as created_at, wa_messages.poll_name as poll_name
-                    FROM wa_messages
-                    JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
+                    SELECT name, number, message, is_read, created_at, poll_name
+                            FROM (
+                                SELECT
+                                    wa_users.name AS name,
+                                    wa_users.phone_number AS number,
+                                    wa_messages.message AS message,
+                                    wa_messages.is_read AS is_read,
+                                    wa_messages.created_at AS created_at,
+                                    wa_messages.poll_name AS poll_name,
+                                    ROW_NUMBER() OVER (PARTITION BY wa_messages.wa_user_id, wa_messages.poll_name ORDER BY wa_messages.created_at DESC) AS rn
+                                FROM wa_messages
+                                JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
+                                ORDER BY wa_messages.created_at ASC
+                        ) ranked
+                    WHERE rn = 1
                     LIMIT 1000
                 ''')
             else:
                 wa_messages = cursor.execute('''
-                    SELECT wa_users.name as name, wa_users.phone_number as number, wa_messages.message as message, wa_messages.is_read as is_read, wa_messages.created_at as created_at
-                    FROM wa_messages
-                    JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
-                    WHERE wa_messages.poll_name = ?
+                    SELECT name, number, message, is_read, created_at
+                    FROM (
+                        SELECT
+                            wa_users.name AS name,
+                            wa_users.phone_number AS number,
+                            wa_messages.message AS message,
+                            wa_messages.is_read AS is_read,
+                            wa_messages.created_at AS created_at,
+                            ROW_NUMBER() OVER (PARTITION BY wa_messages.wa_user_id ORDER BY wa_messages.created_at DESC) AS rn
+                        FROM wa_messages
+                        JOIN wa_users ON wa_messages.wa_user_id = wa_users.id
+                        WHERE wa_messages.poll_name = ?
+                        ORDER BY wa_messages.created_at ASC
+                    ) ranked
+                    WHERE rn = 1
                     LIMIT 1000
                 ''', (poll_name,))
 
