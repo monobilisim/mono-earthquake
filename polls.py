@@ -69,6 +69,9 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
         location = earthquake['location'] if earthquake_data else 'Unknown location'
         depth = earthquake['depth'] if earthquake_data else 'N/A'
         timestamp = earthquake['timestamp'] if earthquake_data else datetime.now().isoformat()
+        dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        time = dt.strftime("%H:%M:%S")
+        date = dt.strftime("%d/%m/%Y")
 
         template_data = {
             "messaging_product": "whatsapp",
@@ -91,7 +94,7 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
                             {
                                 "type": "text",
                                 "parameter_name": "detay",
-                                "text": f"{location} merkezli {magnitude} boyutunda"
+                                "text": f"{location} merkezli {magnitude} büyüklüğünde saat {time}, {date} tarihinde"
                             }
                         ]
                     }
