@@ -70,7 +70,7 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
         depth = earthquake['depth'] if earthquake_data else 'N/A'
         timestamp = earthquake['timestamp'] if earthquake_data else datetime.now().isoformat()
         dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
-        time = dt.strftime("%H:%M:%S")
+        time = dt.strftime("%H:%M")
         date = dt.strftime("%d/%m/%Y")
 
         template_data = {
@@ -94,7 +94,7 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
                             {
                                 "type": "text",
                                 "parameter_name": "detay",
-                                "text": f"{location} merkezli {magnitude} büyüklüğünde saat {time}, {date} tarihinde"
+                                "text": f"Biraz önce ({time}) {location} merkezli {magnitude} büyüklüğünde"
                             }
                         ]
                     }
