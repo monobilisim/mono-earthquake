@@ -69,7 +69,6 @@ class EarthquakeDatabase:
         try:
             cursor = conn.cursor()
 
-            # Create earthquakes table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS earthquakes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,12 +92,6 @@ class EarthquakeDatabase:
             )
             ''')
 
-            # Create index on date for faster queries
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_earthquakes_date ON earthquakes(date)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_earthquakes_year_month ON earthquakes(year, month)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_earthquakes_year_week ON earthquakes(year, week)')
-
-            # Create webhooks table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS webhooks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -112,39 +105,24 @@ class EarthquakeDatabase:
             )
             ''')
 
-            # Create index on webhook name for faster queries
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_webhooks_name ON webhooks(name)')
-
-            # Create polls table
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS polls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(255) NOT NULL UNIQUE,
                 type VARCHAR(255) NOT NULL,
-                min_magnitude REAL DEFAULT 1.7,
-                created_at TEXT NOT NULL
-            )
-            ''')
-
-            # Create wa_users table
-            cursor.execute('''
-            CREATE TABLE IF NOT EXISTS wa_users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name VARCHAR(255) NOT NULL,
-                phone_number VARCHAR(20) NOT NULL,
-                poll_name VARCHAR(255) DEFAULT NULL,
-                last_sent_at DATETIME,
-                created_at TEXT NOT NULL
+                threshold REAL DEFAULT NULL,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             ''')
 
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS wa_messages (
                 id TEXT PRIMARY KEY,
-                wa_user_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
                 is_read BOOLEAN NOT NULL DEFAULT 0,
                 message TEXT,
                 poll_name VARCHAR(255) DEFAULT NULL,
+                earthquake_id INTEGER DEFAULT NULL,
                 updated_at DATETIME NOT NULL,
                 created_at TEXT NOT NULL
             )
@@ -153,9 +131,21 @@ class EarthquakeDatabase:
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS wa_messages_failed (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                wa_user_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
                 poll_name VARCHAR(255) DEFAULT NULL,
+                earthquake_id INTEGER DEFAULT NULL,
                 reason TEXT,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            ''')
+
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS groups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name VARCHAR(255) NOT NULL UNIQUE,
+                polls VARCHAR(255) DEFAULT NULL,
+                active BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
             ''')
@@ -164,8 +154,11 @@ class EarthquakeDatabase:
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name VARCHAR(255) NOT NULL UNIQUE,
-                password VARCHAR(255) NOT NULL,
-                poll_name VARCHAR(255) DEFAULT NULL,
+                phone_number VARCHAR(20) DEFAULT NULL,
+                groups TEXT DEFAULT NULL,
+                roles TEXT DEFAULT NULL,
+                activation_token VARCHAR(255) DEFAULT NULL,
+                active BOOLEAN NOT NULL DEFAULT 1,
                 created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
@@ -181,84 +174,10 @@ class EarthquakeDatabase:
             )
             ''')
 
-            # ON DELETE CASCADE does not work if foreign keys are not enabled
-            cursor.execute("PRAGMA foreign_keys = ON;")
-
-            cursor.execute('''
-            CREATE TRIGGER IF NOT EXISTS delete_expired_sessions
-            AFTER INSERT ON sessions
-            FOR EACH ROW
-            BEGIN
-                DELETE FROM sessions WHERE expiration_date <= CURRENT_TIMESTAMP;
-            END;
-            ''')
-
-            cursor.execute('''
-                CREATE TRIGGER IF NOT EXISTS keep_last_sessions
-                AFTER INSERT ON sessions
-                FOR EACH ROW
-                BEGIN
-                    DELETE FROM sessions
-                    WHERE user_id = NEW.user_id
-                      AND id NOT IN (
-                          SELECT id
-                          FROM sessions
-                          WHERE user_id = NEW.user_id
-                          ORDER BY id DESC
-                          LIMIT 1
-                      );
-                END;
-            ''')
-
-            # Create indexes for polls tables
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_polls_name ON polls(name)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_wa_users_phone ON wa_users(phone_number)')
-
             conn.commit()
         except sqlite3.Error as e:
             logger.error(f"Error initializing database schema: {e}")
             raise Exception(f"Error initializing database schema: {e}")
-
-    # def clear_old_wa_messages(self):
-    #     try:
-    #         conn = self._get_connection()
-    #         cursor = conn.cursor()
-
-    #         # Get all messages - no join needed since poll_name is in wa_messages
-    #         cursor.execute('''
-    #             SELECT id, poll_name, wa_user_id, created_at
-    #             FROM wa_messages
-    #             ORDER BY poll_name, wa_user_id, created_at DESC
-    #         ''')
-    #         all_messages = cursor.fetchall()
-
-    #         # Group messages by (poll_name, wa_user_id) and keep only the latest
-    #         messages_to_keep = set()
-    #         seen_combinations = set()
-
-    #         for msg_id, poll_name, wa_user_id, created_at in all_messages:
-    #             combination = (poll_name, wa_user_id)
-    #             if combination not in seen_combinations:
-    #                 messages_to_keep.add(msg_id)
-    #                 seen_combinations.add(combination)
-
-    #         # Delete messages not in the keep set
-    #         if messages_to_keep:
-    #             placeholders = ','.join('?' * len(messages_to_keep))
-    #             cursor.execute(f'''
-    #                 DELETE FROM wa_messages
-    #                 WHERE id NOT IN ({placeholders})
-    #             ''', list(messages_to_keep))
-    #         else:
-    #             cursor.execute('DELETE FROM wa_messages')
-
-    #         deleted_count = cursor.rowcount
-    #         conn.commit()
-    #         logger.info(f"Cleared {deleted_count} WhatsApp messages, keeping last message per user per poll")
-
-    #     except sqlite3.Error as e:
-    #         logger.error(f"Error clearing old WhatsApp messages: {e}")
-    #         raise Exception(f"Error clearing old WhatsApp messages: {e}")
 
     def authenticate_user(self, name, password, session=None):
         if session is not None:
@@ -330,7 +249,7 @@ class EarthquakeDatabase:
             logger.error(f"Error checking session: {e}")
             raise Exception(f"Error checking session: {e}")
 
-    def create_wa_message(self, phone_number, message_id, poll_name: str | None =None):
+    def create_wa_message(self, phone_number, message_id, poll_name: str | None =None, earthquake_id: int | None = None):
         if not phone_number or not message_id:
             return 0
 
@@ -349,9 +268,9 @@ class EarthquakeDatabase:
             now = datetime.utcnow().isoformat()
 
             cursor.execute('''
-                INSERT INTO wa_messages (id, wa_user_id, is_read, message, poll_name, updated_at, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (message_id, wa_user_id, 0, None, poll_name, now, now))
+                INSERT INTO wa_messages (id, wa_user_id, is_read, message, poll_name, earthquake_id, updated_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (message_id, wa_user_id, 0, None, poll_name, earthquake_id, now, now))
 
             conn.commit()
             return cursor.lastrowid
@@ -360,7 +279,7 @@ class EarthquakeDatabase:
             logger.error(f"Error creating WhatsApp message: {e}")
             raise Exception(f"Error creating WhatsApp message: {e}")
 
-    def create_wa_messages_failed(self, phone_number, reason, poll_name: str | None = None):
+    def create_wa_messages_failed(self, phone_number, reason, poll_name: str | None = None, earthquake_id: int | None = None):
         if not phone_number:
             return 0
 
@@ -377,9 +296,9 @@ class EarthquakeDatabase:
             wa_user_id = user[0]
 
             cursor.execute('''
-                INSERT INTO wa_messages_failed (wa_user_id, reason, poll_name)
-                VALUES (?, ?, ?)
-            ''', (wa_user_id, reason, poll_name))
+                INSERT INTO wa_messages_failed (wa_user_id, reason, poll_name, earthquake_id)
+                VALUES (?, ?, ?, ?)
+            ''', (wa_user_id, reason, poll_name, earthquake_id))
 
             conn.commit()
             return cursor.lastrowid
@@ -1266,7 +1185,7 @@ class EarthquakeDatabase:
             DELETE FROM earthquakes
             WHERE id = (
                 SELECT id FROM earthquakes
-                ORDER BY timestamp DESC
+                ORDER BY id DESC
                 LIMIT 1
             )
             ''')

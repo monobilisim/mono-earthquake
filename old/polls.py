@@ -78,9 +78,9 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
             "to": phone_number,
             "type": "template",
             "template": {
-                "name": TEMPLATE_NAME,
+                "name": "deprem",
                 "language": {
-                    "code": TEMPLATE_LANGUAGE
+                    "code": "tr"
                 },
                 "components": [
                     {
@@ -102,7 +102,6 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
             }
         }
 
-        # Send to WhatsApp API
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {WA_API_TOKEN}"
@@ -114,13 +113,13 @@ def send_earthquake_template_to_user(db, user, poll, earthquake_data):
         if response.status_code == 200:
 
             db.update_wa_user_last_sent(phone_number)
-            db.create_wa_message(phone_number, response.json()['messages'][0]['id'], poll['name'])
+            db.create_wa_message(phone_number, response.json()['messages'][0]['id'], poll['name'], earthquake['id'])
 
             print(f"Successfully sent template to {user_name} ({phone_number})")
             return True
         else:
             print(f"Failed to send template to {user_name} ({phone_number}): {response.status_code} - {response.text}")
-            db.create_wa_messages_failed(phone_number, f"API responded with {response.status_code}", poll['name'])
+            db.create_wa_messages_failed(phone_number, f"API responded with {response.status_code}", poll['name'], earthquake['id'])
             return False
 
     except Exception as e:

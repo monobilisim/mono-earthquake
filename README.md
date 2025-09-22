@@ -1,106 +1,34 @@
-# KOERI Earthquake Data API
+# How to install and use
 
-This API fetches, parses, and serves earthquake data from the Kandilli Observatory and Earthquake Research Institute (KOERI) of Boğaziçi University.
-
-## Features
-
-- Search from stored earthquake data
-- Easily fetch data based on date and time
-
-## Installation
-
-1. Clone this repository:
+First copy .env.example to .env and fill in the required fields.
 
 ```bash
-git clone https://github.com/monobilisim/mono-earthquake.git
-cd mono-earthquake
+cp .env.example .env
 ```
 
-2. Install dependencies:
+Then install Docker and Docker Compose or Podman and Podman Compose with podman-docker compatibility layer.
 
-```bash
-pip install -r requirements.txt
-```
-
-3. Run
-
-```bash
-python3 main.py
-```
-
-## Alternative Installation
-
-1. Install `docker` or `podman` with `podman-docker`
-
-https://docs.docker.com/engine/install/debian
-
-```bash
-apt install podman podman-docker
-```
-
-2. Clone this repository
-
-```bash
-git clone https://github.com/monobilisim/mono-earthquake.git
-cd mono-earthquake
-```
-
-3. Run
+Last step is to run the containers.
 
 ```bash
 docker compose up -d
 ```
 
-## Usage
+# How do i use it?
 
-### CLI
+You need to create your account first. With this SQL query.
 
-```console
-python3 manage-webhooks.py help
+```sql
+INSERT INTO users (name, phone_number, groups, roles) VALUES ('Your Name', 'Your Phone Number', 'admin or your company name', 'admin');
 ```
 
-### Running the API
+Then create the poll named "deprem" and choose the type with the following SQL query.
+The lowest threshold in polls table will be used to fetch the data for earthquakes.
 
-By default, the API binds itself to `http://0.0.0.0:8000`.
-
-### API Documentation
-
-Once the API is running, you can access the Swagger documentation at `http://127.0.0.1:8000/docs`.
-
-### Adding webhooks
-
-```console
-python3 manage-webhooks.py <type> <url> <name>
+```sql
+INSERT INTO polls (name, type, threshold) VALUES ('deprem', 'whatsapp', 5.0);
 ```
 
-#### Currently supported webhook providers
+Make sure Meta Whatsapp webhook URL is configured to http://your-server-ip:8000/wa-callback without you can't login.
 
-Discord,
-Zulip (slack_incoming),
-Generic
-
-```json
-{
-  "id": 1,
-  "timestamp": "2023-11-15T08:18:34Z",
-  "date": "2023-11-15",
-  "time": "08:18:34",
-  "latitude": 39.2558,
-  "longitude": 28.9703,
-  "depth": 5.4,
-  "md": null,
-  "ml": 2.3,
-  "mw": null,
-  "magnitude": 2.3,
-  "location": "YEMISLI-SIMAV (KUTAHYA)",
-  "quality": "İlksel",
-  "year": 2025,
-  "month": 5,
-  "day": 13,
-  "week": 20,
-}
-```
-
-## License
-
-This project is licensed under the GPL3 License - see the LICENSE file for details.
+Open your browser and go to http://ipv4:8000

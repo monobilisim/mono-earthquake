@@ -6,10 +6,18 @@ services:
     image: mono-earthquake:latest
     container_name: mono-earthquake
     ports:
-      - '${PORT}:${PORT}'
+      - "${PORT}:${PORT}"
     volumes:
       - ./data:/mono-earthquake/data
     environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
       - PORT=${PORT}
       - POLL_INTERVAL=${POLL_INTERVAL}
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

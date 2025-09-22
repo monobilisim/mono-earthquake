@@ -1,4 +1,6 @@
 <script lang="ts">
+    import "./app.css";
+
     let username = $state("");
     let password = $state("");
     let messageRows: MessageRow[] = $state([]);
@@ -13,7 +15,7 @@
     let currentPage = $state("home");
     let stats = $state({});
 
-    import Stats from "./lib/Stats.svelte"
+    import Stats from "./lib/Stats.svelte";
 
     type MessageRow = {
         name: string;
@@ -110,14 +112,17 @@
         }
 
         if (session) {
-          (async () => {
-          const statsResponse = await fetch("/wa_message_stats_full", { method: "POST", body: JSON.stringify({ session })});
-          if (statsResponse.ok) {
-            stats = await statsResponse.json();
-            stats = stats.data;
-            console.log(stats);
-          }
-          })();
+            (async () => {
+                const statsResponse = await fetch("/wa_message_stats_full", {
+                    method: "POST",
+                    body: JSON.stringify({ session }),
+                });
+                if (statsResponse.ok) {
+                    stats = await statsResponse.json();
+                    stats = stats.data;
+                    console.log(stats);
+                }
+            })();
         }
     });
 
@@ -136,9 +141,13 @@
                     <h1>WhatsApp Message Statistics</h1>
                     <div class="logout-div">
                         {#if currentPage === "stats"}
-                            <a class="stats" onclick={currentPage = "home"}>home</a>
+                            <a class="stats" onclick={(currentPage = "home")}
+                                >home</a
+                            >
                         {:else}
-                            <a class="stats" onclick={currentPage = "stats"}>stats</a>
+                            <a class="stats" onclick={(currentPage = "stats")}
+                                >stats</a
+                            >
                         {/if}
 
                         {#if messageRows[0]?.poll_name}
@@ -167,66 +176,68 @@
                 </div>
 
                 {#if currentPage === "home"}
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Phone Number</th>
-                                <th>Message</th>
-                                <th>Status</th>
-                                <th>Created At</th>
-                                {#if messageRows[0]?.poll_name}
-                                    <th>Poll Name</th>
-                                {/if}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each shownMessageRows as row, index}
+                    <div class="table-container">
+                        <table>
+                            <thead>
                                 <tr>
-                                    <td>{row.name}</td>
-                                    <td>{row.number}</td>
-                                    <td class="message-cell">
-                                        {#if row.message}
-                                            <span class="message"
-                                                >{row.message}</span
-                                            >
-                                        {:else}
-                                            <span class="no-message"
-                                                >No response</span
-                                            >
-                                        {/if}
-                                    </td>
-                                    <td>
-                                        {#if row.is_read}
-                                            <span class="status responded"
-                                                >Read</span
-                                            >
-                                        {:else}
-                                            <span class="status no-response"
-                                                >Not Read</span
-                                            >
-                                        {/if}
-                                    </td>
-                                    <td
-                                        >{new Date(
-                                            row.created_at.replace(" ", "T") +
-                                                "Z",
-                                        ).toLocaleString()}</td
-                                    >
-                                    {#if row?.poll_name}
-                                        <td>
-                                            <span>{row.poll_name}</span>
-                                        </td>
+                                    <th>Name</th>
+                                    <th>Phone Number</th>
+                                    <th>Message</th>
+                                    <th>Status</th>
+                                    <th>Created At</th>
+                                    {#if messageRows[0]?.poll_name}
+                                        <th>Poll Name</th>
                                     {/if}
                                 </tr>
-                            {/each}
-                        </tbody>
-                    </table>
-                    {#if messageRows.length === 0 && didLogin}
-                        <div class="no-data">No messages found.</div>
-                    {/if}
-                </div>
+                            </thead>
+                            <tbody>
+                                {#each shownMessageRows as row, index}
+                                    <tr>
+                                        <td>{row.name}</td>
+                                        <td>{row.number}</td>
+                                        <td class="message-cell">
+                                            {#if row.message}
+                                                <span class="message"
+                                                    >{row.message}</span
+                                                >
+                                            {:else}
+                                                <span class="no-message"
+                                                    >No response</span
+                                                >
+                                            {/if}
+                                        </td>
+                                        <td>
+                                            {#if row.is_read}
+                                                <span class="status responded"
+                                                    >Read</span
+                                                >
+                                            {:else}
+                                                <span class="status no-response"
+                                                    >Not Read</span
+                                                >
+                                            {/if}
+                                        </td>
+                                        <td
+                                            >{new Date(
+                                                row.created_at.replace(
+                                                    " ",
+                                                    "T",
+                                                ) + "Z",
+                                            ).toLocaleString()}</td
+                                        >
+                                        {#if row?.poll_name}
+                                            <td>
+                                                <span>{row.poll_name}</span>
+                                            </td>
+                                        {/if}
+                                    </tr>
+                                {/each}
+                            </tbody>
+                        </table>
+                        {#if messageRows.length === 0 && didLogin}
+                            <div class="no-data">No messages found.</div>
+                        {/if}
+                    </div>
                 {/if}
 
                 {#if currentPage === "stats"}
@@ -236,9 +247,7 @@
                         <div class="no-data">No stats available.</div>
                     {/if}
                 {/if}
-
             </div>
-
         {:else if session === "" || sessionLoginError === true}
             <div class="login-container">
                 <div class="login-form">
