@@ -4,16 +4,16 @@
 	import * as Card from '$lib/components/ui/card/index';
 	import * as Table from '$lib/components/ui/table/index';
 	import * as Dialog from '$lib/components/ui/dialog/index';
+	import * as Select from '$lib/components/ui/select/index';
 
 	import { enhance } from '$app/forms';
 	import { toast } from 'svelte-sonner';
-
-	import Pencil from '@lucide/svelte/icons/pencil';
-	import PencilOff from '@lucide/svelte/icons/pencil-off';
-	import Save from '@lucide/svelte/icons/save';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 
 	let { data } = $props();
-	const users = data?.users ?? [];
+	let users = $state(data?.users ?? []);
+	const groups = data?.groups ?? [];
 
 	let newUser: boolean = $state(false);
 	let newUserName: string = $state('');
@@ -25,6 +25,9 @@
 		const formData = new FormData();
 		formData.append('name', newUserName);
 		formData.append('phone_number', newUserPhoneNumber);
+		if (rolesMultiSelectEnabled && newUserRolesMulti.length > 0) {
+			newUserRoles = newUserRolesMulti.join(',');
+		}
 		formData.append('roles', newUserRoles);
 		formData.append('groups', newUserGroups);
 
@@ -51,40 +54,206 @@
 		}
 	}
 
-	let editUser: number = $state(0);
-	let editUserState: boolean = $state(false);
+	let userToggleState: Record<string, boolean> = $derived(
+		Object.fromEntries(users.map((u) => [u.id, u.active]))
+	);
 
-	function seteditUser(id: number) {
-		editUser = id;
-		editUserState = <any>users.find((g) => g.id === id)?.active;
+	let rolesMultiSelectEnabled: boolean = $state(true);
+	let newUserRolesMulti: string[] = $state([]);
+
+	let tenantsMultiSelectEnabled: boolean = $state(true);
+
+	let toggleFormState: Record<string, HTMLFormElement> = $derived(
+		Object.fromEntries(users.map((u) => [u.id]))
+	);
+
+	let filters = $state({
+		name: '',
+		phone_number: '',
+		roles: '',
+		groups: '',
+		active: ''
+	});
+
+	const originalUsers = data.users ?? [];
+
+	const urlParams = new URLSearchParams(page.url.search);
+
+	let filteringApplied = $derived(users.length !== originalUsers.length);
+
+	if (
+		urlParams.get('name') !== '' ||
+		urlParams.get('phone_number') !== '' ||
+		urlParams.get('roles') !== '' ||
+		urlParams.get('groups') !== '' ||
+		urlParams.get('active') !== ''
+	) {
+		filters = {
+			name: urlParams.get('name') ?? '',
+			phone_number: urlParams.get('phone_number') ?? '',
+			roles: urlParams.get('roles') ?? '',
+			groups: urlParams.get('groups') ?? '',
+			active: urlParams.get('active') ?? ''
+		};
+
+		console.log(filters);
+
+		applyFilters();
+	}
+
+	function applyFilters() {
+		const filteredUsers = originalUsers.filter((user) => {
+			if (filters.name !== '' && !user.name.toLowerCase().includes(filters.name.toLowerCase())) {
+				return false;
+			}
+
+			if (filters.phone_number !== '' && !user.phone_number.includes(filters.phone_number)) {
+				return false;
+			}
+
+			if (filters.roles !== '' && !user.roles.includes(filters.roles)) {
+				return false;
+			}
+
+			if (filters.groups !== '' && !user.groups.includes(filters.groups)) {
+				return false;
+			}
+
+			if (filters.active !== '' && !(user.active.toString() === filters.active)) {
+				return false;
+			}
+
+			return true;
+		});
+
+		users = filteredUsers;
+	}
+
+	function clearFilters() {
+		filters = {
+			name: '',
+			phone_number: '',
+			roles: '',
+			groups: '',
+			active: ''
+		};
+
+		const url = new URL(page.url);
+		url.search = '';
+		goto(url.toString(), { replaceState: true, noScroll: true });
+
+		users = originalUsers;
 	}
 </script>
 
 <div class="h-full w-full p-4">
 	<Card.Root>
 		<Card.Header class="flex items-center justify-between">
-			<Card.Title>Users</Card.Title>
-			{#if newUser}
-				<div>
-					<Button
-						onclick={() => {
-							newUser = false;
-							newUserAdd();
-						}}>Save</Button
-					>
-					<Button
-						onclick={() => {
-							newUser = false;
-						}}>Cancel</Button
-					>
+			{#if filteringApplied}
+				<div class="flex gap-2">
+					<Card.Title>Users</Card.Title>
+					<p class="text-sm text-slate-500">(filtered)</p>
 				</div>
 			{:else}
-				<Button
-					onclick={() => {
-						newUser = true;
-					}}>Add new user</Button
-				>
+				<Card.Title>Users</Card.Title>
 			{/if}
+			<div class="flex gap-1">
+				<Dialog.Root>
+					<Dialog.Trigger>
+						<Button>Filters</Button>
+					</Dialog.Trigger>
+					<Dialog.Content>
+						<Dialog.Title>Filters</Dialog.Title>
+						<Dialog.Description
+							>Filter users by name, phone number, roles, tenant or status.</Dialog.Description
+						>
+						<div class="grid grid-cols-2 grid-rows-2 gap-2">
+							<label
+								>Name
+								<Input bind:value={filters.name} />
+							</label>
+							<label
+								>Phone Number
+								<Input bind:value={filters.phone_number} />
+							</label>
+							<label
+								>Roles
+								<Input bind:value={filters.roles} />
+							</label>
+							<label
+								>Tenant
+								<Select.Root type="single" bind:value={filters.groups}>
+									<Select.Trigger>
+										{filters.groups != '' ? filters.groups : 'Select a tenant'}
+									</Select.Trigger>
+									<Select.Content>
+										{#each groups as group}
+											<Select.Item value={group} label={group} />
+										{/each}
+										<Select.Item value="" label="None" />
+									</Select.Content>
+								</Select.Root>
+							</label>
+						</div>
+						<label
+							>Status
+
+							<Select.Root type="single" bind:value={filters.active}>
+								<Select.Trigger
+									>{filters.active != '' ? (filters.active == '1' ? 'Active' : 'Passive') : 'All'}
+								</Select.Trigger>
+								<Select.Content>
+									<Select.Item value="1" label="Active" />
+									<Select.Item value="0" label="Passive" />
+									<Select.Item value="" label="All" />
+								</Select.Content>
+							</Select.Root>
+						</label>
+						<div class="flex justify-end gap-2">
+							<Dialog.Close>
+								<Button onclick={() => clearFilters()}>Clear filters</Button>
+							</Dialog.Close>
+							<Dialog.Close>
+								<Button
+									onclick={() => {
+										const url = new URL(page.url);
+										filters.name !== '' && url.searchParams.set('name', filters.name);
+										filters.phone_number !== '' &&
+											url.searchParams.set('phone_number', filters.phone_number);
+										filters.roles !== '' && url.searchParams.set('roles', filters.roles);
+										filters.groups !== '' && url.searchParams.set('groups', filters.groups);
+										filters.active !== '' && url.searchParams.set('active', filters.active);
+										goto(url.toString());
+										applyFilters();
+									}}>Apply filters</Button
+								>
+							</Dialog.Close>
+						</div>
+					</Dialog.Content>
+				</Dialog.Root>
+
+				{#if newUser}
+					<div>
+						<Button
+							onclick={() => {
+								newUser = false;
+								newUserAdd();
+							}}>Save</Button
+						>
+						<Button
+							onclick={() => {
+								newUser = false;
+							}}>Cancel</Button
+						>
+					</div>
+				{:else}
+					<Button
+						onclick={() => {
+							newUser = true;
+						}}>Add new user</Button
+					>
+				{/if}
+			</div>
 		</Card.Header>
 		<Card.Content>
 			<Table.Root>
@@ -94,7 +263,7 @@
 						<Table.Head class="w-32">Name</Table.Head>
 						<Table.Head class="w-32">Phone Number</Table.Head>
 						<Table.Head class="w-64">Roles</Table.Head>
-						<Table.Head class="w-64">Group</Table.Head>
+						<Table.Head class="w-64">Tenant</Table.Head>
 						<Table.Head class="w-128">Status</Table.Head>
 					</Table.Row>
 				</Table.Header>
@@ -108,49 +277,35 @@
 							<Table.Cell>{user.groups}</Table.Cell>
 							<Table.Cell
 								><div class="flex items-center justify-between">
-									{#if editUser === user.id}
-										<div class="flex items-center gap-2">
-											<div>{editUserState ? 'Active' : 'Passive'}</div>
-											<form
-												action="?/toggleUser"
-												method="POST"
-												use:enhance={() => {
-													editUser = 0;
-													return async ({ result }) => {
-														if (result.type === 'failure') {
-															toast.error(result.data);
-														}
+									<div class="flex gap-2">
+										<div>{user.active ? 'Active' : 'Passive'}</div>
+										<form
+											bind:this={toggleFormState[user.id]}
+											action="?/toggleUser"
+											method="POST"
+											use:enhance={() => {
+												return async ({ result }) => {
+													if (result.type === 'failure') {
+														toast.error(result.data);
+													}
 
-														if (result.type === 'success') {
-															window.location.reload();
-														}
-													};
+													if (result.type === 'success') {
+														window.location.reload();
+													}
+												};
+											}}
+										>
+											<Input type="hidden" name="id" value={user.id} />
+											<Input
+												type="checkbox"
+												name="state"
+												bind:checked={userToggleState[user.id]}
+												onchange={() => {
+													toggleFormState[user.id]?.requestSubmit();
 												}}
-											>
-												<Input type="hidden" name="id" value={user.id} />
-												<Input type="checkbox" name="state" bind:checked={editUserState} />
-												<Button variant="ghost" class="p-0!" type="submit">
-													<Save class="h-4 w-4" />
-												</Button>
-												<Button variant="ghost" class="p-0!" onclick={() => (editUser = 0)}>
-													<PencilOff class="h-4 w-4" />
-												</Button>
-											</form>
-										</div>
-									{:else}
-										<div class="flex items-center gap-2">
-											<div>{user.active ? 'Active' : 'Passive'}</div>
-											<Button
-												variant="ghost"
-												class="p-0!"
-												onclick={() => {
-													seteditUser(user.id);
-												}}
-											>
-												<Pencil class="h-4 w-4" />
-											</Button>
-										</div>
-									{/if}
+											/>
+										</form>
+									</div>
 
 									<Dialog.Root>
 										<Dialog.Trigger>
@@ -240,54 +395,92 @@
 									}}
 								/></Table.Cell
 							>
-							<Table.Cell
-								><Input
-									name="roles"
-									placeholder="admin,group-masked"
-									bind:value={newUserRoles}
-									onbeforeinput={(e) => {
-										const type = e.inputType;
+							<Table.Cell>
+								{#if rolesMultiSelectEnabled}
+									<Select.Root type="multiple" bind:value={newUserRolesMulti} name="roles">
+										<Select.Trigger
+											>{newUserRolesMulti.length > 0
+												? newUserRolesMulti.join(',')
+												: 'Select roles'}</Select.Trigger
+										>
 
-										if (
-											type === 'deleteContentBackward' ||
-											type === 'deleteContentForward' ||
-											type === 'insertLineBreak'
-										) {
-											return;
-										}
+										<Select.Content>
+											<Select.Item value="admin" label="admin" />
+											<Select.Item value="masked" label="masked" />
+											<Select.Item
+												value=""
+												label="custom role"
+												onclick={() => (rolesMultiSelectEnabled = !rolesMultiSelectEnabled)}
+											/>
+										</Select.Content>
+									</Select.Root>
+								{:else}
+									<Input
+										name="roles"
+										placeholder="tenant,tenant-masked"
+										bind:value={newUserRoles}
+										onbeforeinput={(e) => {
+											const type = e.inputType;
 
-										e.preventDefault();
+											if (
+												type === 'deleteContentBackward' ||
+												type === 'deleteContentForward' ||
+												type === 'insertLineBreak'
+											) {
+												return;
+											}
 
-										if (e.data && /[a-zA-Z0-9,-]/.test(e.data) && newUserRoles.length < 255) {
-											newUserRoles += e.data;
-										}
-									}}
-								/></Table.Cell
-							>
-							<Table.Cell
-								><Input
-									name="groups"
-									placeholder="group"
-									bind:value={newUserGroups}
-									onbeforeinput={(e) => {
-										const type = e.inputType;
+											e.preventDefault();
 
-										if (
-											type === 'deleteContentBackward' ||
-											type === 'deleteContentForward' ||
-											type === 'insertLineBreak'
-										) {
-											return;
-										}
+											if (e.data && /[a-zA-Z0-9,-]/.test(e.data) && newUserRoles.length < 255) {
+												newUserRoles += e.data;
+											}
+										}}
+									/>
+								{/if}
+							</Table.Cell>
+							<Table.Cell>
+								{#if tenantsMultiSelectEnabled}
+									<Select.Root type="single" bind:value={newUserGroups} name="groups">
+										<Select.Trigger
+											>{newUserGroups != '' ? newUserGroups : 'Select a tenant'}</Select.Trigger
+										>
+										<Select.Content>
+											{#each groups as group}
+												<Select.Item value={group} label={group} />
+											{/each}
+											<Select.Item
+												value=""
+												label="custom tenant"
+												onclick={() => (tenantsMultiSelectEnabled = !tenantsMultiSelectEnabled)}
+											/>
+										</Select.Content>
+									</Select.Root>
+								{:else}
+									<Input
+										name="groups"
+										placeholder="tenant"
+										bind:value={newUserGroups}
+										onbeforeinput={(e) => {
+											const type = e.inputType;
 
-										e.preventDefault();
+											if (
+												type === 'deleteContentBackward' ||
+												type === 'deleteContentForward' ||
+												type === 'insertLineBreak'
+											) {
+												return;
+											}
 
-										if (e.data && /[a-zA-Z0-9,]/.test(e.data) && newUserGroups.length < 32) {
-											newUserGroups += e.data;
-										}
-									}}
-								/></Table.Cell
-							>
+											e.preventDefault();
+
+											if (e.data && /[a-zA-Z0-9,]/.test(e.data) && newUserGroups.length < 32) {
+												newUserGroups += e.data;
+											}
+										}}
+									/>
+								{/if}
+							</Table.Cell>
 						</Table.Row>
 					{/if}
 				</Table.Body>

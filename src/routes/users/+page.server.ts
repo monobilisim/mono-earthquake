@@ -32,6 +32,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
 		if (usersResult.length === 0) {
 			return { users: [] };
 		}
+
 		const users: AppUser[] = usersResult.map((row: Record<string, string>) => ({
 			id: row.id,
 			name: row.name,
@@ -41,8 +42,12 @@ export const load: PageServerLoad = async ({ cookies }) => {
 			active: row.active
 		}));
 
+		const groupResult = await sql`SELECT name FROM groups`;
+		const groups: string[] = groupResult.map((row: Record<string, string>) => row.name);
+
 		return {
-			users
+			users,
+			groups
 		};
 	}
 };

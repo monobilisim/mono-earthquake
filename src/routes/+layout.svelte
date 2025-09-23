@@ -35,8 +35,8 @@
 				role: 'admin'
 			},
 			{
-				title: 'Groups',
-				url: '/groups',
+				title: 'Tenants',
+				url: '/tenants',
 				icon: LayersIcon,
 				role: 'admin'
 			}

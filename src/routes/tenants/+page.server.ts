@@ -68,7 +68,7 @@ export const actions: Actions = {
 			.replace(/[^A-Za-z0-9,]/g, '');
 
 		if (!name) {
-			return fail(400, 'Group name is required');
+			return fail(400, 'Tenant name is required');
 		}
 
 		if (!polls) {
@@ -100,7 +100,7 @@ export const actions: Actions = {
 		const id = stripNonAlnumAscii(formData.get('id')?.toString().trim() || '');
 
 		if (!id) {
-			return fail(400, 'Group ID is required');
+			return fail(400, 'Tenant ID is required');
 		}
 
 		try {
@@ -143,7 +143,7 @@ export const actions: Actions = {
 		}
 
 		if (!id) {
-			return fail(400, 'Group ID is required');
+			return fail(400, 'Tenant ID is required');
 		}
 
 		try {

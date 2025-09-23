@@ -85,15 +85,22 @@
 	import { getLocalTimeZone, today } from '@internationalized/date';
 	import { RangeCalendar } from '$lib/components/ui/range-calendar/index.js';
 
-	const start = today(getLocalTimeZone());
-	const end = start.add({ days: 7 });
+	const start = today(getLocalTimeZone()).subtract({ days: 14 });
+	const end = start.add({ days: 14 });
 
 	let earthquakeFilters = $state({
-		magnitude: [2, 8],
+		magnitude: [0, 10],
 		date: { start, end }
 	});
 
 	const url = $derived(new URL(page.url));
+
+	if (url.searchParams.get('min_magnitude')) {
+		earthquakeFilters.magnitude[0] = url.searchParams.get('min_magnitude') as never;
+	}
+	if (url.searchParams.get('max_magnitude')) {
+		earthquakeFilters.magnitude[1] = url.searchParams.get('max_magnitude') as never;
+	}
 </script>
 
 {#if user.name}
@@ -130,6 +137,14 @@
 								<RangeCalendar bind:value={earthquakeFilters.date} class="rounded-md border" />
 
 								<Dialog.Close>
+									<Button
+										onclick={async () => {
+											const url = new URL(window.location.pathname, window.location.origin);
+
+											window.location.href = url.toString();
+										}}>Clear Filters</Button
+									>
+
 									<Button
 										onclick={async () => {
 											const url = new URL(window.location.pathname, window.location.origin);
