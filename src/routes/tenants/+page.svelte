@@ -114,7 +114,7 @@
 </script>
 
 <div class="h-full w-full p-4">
-	<Card.Root>
+	<Card.Root class="h-[98vh] overflow-y-auto">
 		<Card.Header class="flex items-center justify-between">
 			<Card.Title>Tenants</Card.Title>
 			<div class="flex gap-1">
@@ -201,6 +201,79 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
+					{#if newGroup == true}
+						<Table.Row>
+							<Table.Cell></Table.Cell>
+							<Table.Cell>
+								<Input
+									name="name"
+									placeholder="Tenant Name"
+									bind:value={newGroupName}
+									onbeforeinput={(e) => {
+										const type = e.inputType;
+
+										if (
+											type === 'deleteContentBackward' ||
+											type === 'deleteContentForward' ||
+											type === 'insertLineBreak'
+										) {
+											return;
+										}
+
+										e.preventDefault();
+
+										if (e.data && /[a-zA-Z0-9]/.test(e.data) && newGroupName.length < 32) {
+											newGroupName += e.data;
+										}
+									}}
+								/>
+							</Table.Cell>
+							<Table.Cell>
+								{#if newGroupPollsMultiSelectEnabled}
+									<Select.Root type="multiple" bind:value={newGroupPollsMulti}>
+										<Select.Trigger class="w-full">
+											{newGroupPollsMulti.length > 0
+												? newGroupPollsMulti.join(',')
+												: 'Select Polls'}
+										</Select.Trigger>
+										<Select.Content>
+											<Select.Item value="deprem" label="deprem" />
+											<Select.Item
+												value=""
+												label="custom poll"
+												onclick={() =>
+													(newGroupPollsMultiSelectEnabled = !newGroupPollsMultiSelectEnabled)}
+											/>
+										</Select.Content>
+									</Select.Root>
+								{:else}
+									<Input
+										name="polls"
+										placeholder="poll1,poll2"
+										bind:value={newGroupPolls}
+										onbeforeinput={(e) => {
+											const type = e.inputType;
+
+											if (
+												type === 'deleteContentBackward' ||
+												type === 'deleteContentForward' ||
+												type === 'insertLineBreak'
+											) {
+												return;
+											}
+
+											e.preventDefault();
+
+											if (e.data && /[a-zA-Z0-9,]/.test(e.data) && newGroupPolls.length < 32) {
+												newGroupPolls += e.data;
+											}
+										}}
+									/>
+								{/if}
+							</Table.Cell>
+						</Table.Row>
+					{/if}
+
 					{#each groups as group (group.id)}
 						<Table.Row>
 							<Table.Cell class="font-medium">{group.id}</Table.Cell>
@@ -274,79 +347,6 @@
 							</Table.Cell>
 						</Table.Row>
 					{/each}
-
-					{#if newGroup == true}
-						<Table.Row>
-							<Table.Cell></Table.Cell>
-							<Table.Cell>
-								<Input
-									name="name"
-									placeholder="Tenant Name"
-									bind:value={newGroupName}
-									onbeforeinput={(e) => {
-										const type = e.inputType;
-
-										if (
-											type === 'deleteContentBackward' ||
-											type === 'deleteContentForward' ||
-											type === 'insertLineBreak'
-										) {
-											return;
-										}
-
-										e.preventDefault();
-
-										if (e.data && /[a-zA-Z0-9]/.test(e.data) && newGroupName.length < 32) {
-											newGroupName += e.data;
-										}
-									}}
-								/>
-							</Table.Cell>
-							<Table.Cell>
-								{#if newGroupPollsMultiSelectEnabled}
-									<Select.Root type="multiple" bind:value={newGroupPollsMulti}>
-										<Select.Trigger class="w-full">
-											{newGroupPollsMulti.length > 0
-												? newGroupPollsMulti.join(',')
-												: 'Select Polls'}
-										</Select.Trigger>
-										<Select.Content>
-											<Select.Item value="deprem" label="deprem" />
-											<Select.Item
-												value=""
-												label="custom poll"
-												onclick={() =>
-													(newGroupPollsMultiSelectEnabled = !newGroupPollsMultiSelectEnabled)}
-											/>
-										</Select.Content>
-									</Select.Root>
-								{:else}
-									<Input
-										name="polls"
-										placeholder="poll1,poll2"
-										bind:value={newGroupPolls}
-										onbeforeinput={(e) => {
-											const type = e.inputType;
-
-											if (
-												type === 'deleteContentBackward' ||
-												type === 'deleteContentForward' ||
-												type === 'insertLineBreak'
-											) {
-												return;
-											}
-
-											e.preventDefault();
-
-											if (e.data && /[a-zA-Z0-9,]/.test(e.data) && newGroupPolls.length < 32) {
-												newGroupPolls += e.data;
-											}
-										}}
-									/>
-								{/if}
-							</Table.Cell>
-						</Table.Row>
-					{/if}
 				</Table.Body>
 			</Table.Root>
 		</Card.Content>

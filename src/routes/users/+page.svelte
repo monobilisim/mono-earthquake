@@ -96,8 +96,6 @@
 			active: urlParams.get('active') ?? ''
 		};
 
-		console.log(filters);
-
 		applyFilters();
 	}
 
@@ -147,7 +145,7 @@
 </script>
 
 <div class="h-full w-full p-4">
-	<Card.Root>
+	<Card.Root class="h-[98vh] overflow-y-auto">
 		<Card.Header class="flex items-center justify-between">
 			{#if filteringApplied}
 				<div class="flex gap-2">
@@ -268,82 +266,6 @@
 					</Table.Row>
 				</Table.Header>
 				<Table.Body>
-					{#each users as user}
-						<Table.Row>
-							<Table.Cell class="font-medium">{user.id}</Table.Cell>
-							<Table.Cell>{user.name}</Table.Cell>
-							<Table.Cell>{user.phone_number}</Table.Cell>
-							<Table.Cell>{user.roles}</Table.Cell>
-							<Table.Cell>{user.groups}</Table.Cell>
-							<Table.Cell
-								><div class="flex items-center justify-between">
-									<div class="flex gap-2">
-										<div>{user.active ? 'Active' : 'Passive'}</div>
-										<form
-											bind:this={toggleFormState[user.id]}
-											action="?/toggleUser"
-											method="POST"
-											use:enhance={() => {
-												return async ({ result }) => {
-													if (result.type === 'failure') {
-														toast.error(result.data);
-													}
-
-													if (result.type === 'success') {
-														window.location.reload();
-													}
-												};
-											}}
-										>
-											<Input type="hidden" name="id" value={user.id} />
-											<Input
-												type="checkbox"
-												name="state"
-												bind:checked={userToggleState[user.id]}
-												onchange={() => {
-													toggleFormState[user.id]?.requestSubmit();
-												}}
-											/>
-										</form>
-									</div>
-
-									<Dialog.Root>
-										<Dialog.Trigger>
-											<Button variant="ghost" class="p-0! text-red-500">Delete User</Button>
-										</Dialog.Trigger>
-										<Dialog.Content class="h-64 w-64">
-											<Dialog.Title>Are you sure?</Dialog.Title>
-
-											<Dialog.Description>
-												The user ({users.find((u) => u.id === user.id).name}) will be deleted.</Dialog.Description
-											>
-											<div class="flex flex-col text-center">
-												<form
-													action="?/deleteUser"
-													method="POST"
-													use:enhance={() => {
-														return async ({ result }) => {
-															if (result.type === 'failure') {
-																toast.error(result.data);
-															}
-
-															if (result.type === 'success') {
-																window.location.reload();
-															}
-														};
-													}}
-												>
-													<Input type="hidden" name="id" value={user.id} />
-													<Button variant="destructive" type="submit">Delete User</Button>
-												</form>
-											</div>
-										</Dialog.Content>
-									</Dialog.Root>
-								</div></Table.Cell
-							>
-						</Table.Row>
-					{/each}
-
 					{#if newUser == true}
 						<Table.Row>
 							<Table.Cell></Table.Cell>
@@ -483,6 +405,82 @@
 							</Table.Cell>
 						</Table.Row>
 					{/if}
+
+					{#each users as user}
+						<Table.Row>
+							<Table.Cell class="font-medium">{user.id}</Table.Cell>
+							<Table.Cell>{user.name}</Table.Cell>
+							<Table.Cell>{user.phone_number}</Table.Cell>
+							<Table.Cell>{user.roles}</Table.Cell>
+							<Table.Cell>{user.groups}</Table.Cell>
+							<Table.Cell
+								><div class="flex items-center justify-between">
+									<div class="flex gap-2">
+										<div>{user.active ? 'Active' : 'Passive'}</div>
+										<form
+											bind:this={toggleFormState[user.id]}
+											action="?/toggleUser"
+											method="POST"
+											use:enhance={() => {
+												return async ({ result }) => {
+													if (result.type === 'failure') {
+														toast.error(result.data);
+													}
+
+													if (result.type === 'success') {
+														window.location.reload();
+													}
+												};
+											}}
+										>
+											<Input type="hidden" name="id" value={user.id} />
+											<Input
+												type="checkbox"
+												name="state"
+												bind:checked={userToggleState[user.id]}
+												onchange={() => {
+													toggleFormState[user.id]?.requestSubmit();
+												}}
+											/>
+										</form>
+									</div>
+
+									<Dialog.Root>
+										<Dialog.Trigger>
+											<Button variant="ghost" class="p-0! text-red-500">Delete User</Button>
+										</Dialog.Trigger>
+										<Dialog.Content class="h-64 w-64">
+											<Dialog.Title>Are you sure?</Dialog.Title>
+
+											<Dialog.Description>
+												The user ({users.find((u) => u.id === user.id).name}) will be deleted.</Dialog.Description
+											>
+											<div class="flex flex-col text-center">
+												<form
+													action="?/deleteUser"
+													method="POST"
+													use:enhance={() => {
+														return async ({ result }) => {
+															if (result.type === 'failure') {
+																toast.error(result.data);
+															}
+
+															if (result.type === 'success') {
+																window.location.reload();
+															}
+														};
+													}}
+												>
+													<Input type="hidden" name="id" value={user.id} />
+													<Button variant="destructive" type="submit">Delete User</Button>
+												</form>
+											</div>
+										</Dialog.Content>
+									</Dialog.Root>
+								</div></Table.Cell
+							>
+						</Table.Row>
+					{/each}
 				</Table.Body>
 			</Table.Root>
 		</Card.Content>
