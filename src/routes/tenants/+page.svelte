@@ -114,7 +114,7 @@
 </script>
 
 <div class="h-full w-full p-4">
-	<Card.Root class="h-[98vh] overflow-y-auto">
+	<Card.Root class="h-[98vh] overflow-auto">
 		<Card.Header class="flex items-center justify-between">
 			<Card.Title>Tenants</Card.Title>
 			<div class="flex gap-1">
@@ -281,7 +281,7 @@
 							<Table.Cell>{group.polls}</Table.Cell>
 							<Table.Cell>
 								<div class="flex items-center justify-between">
-									<div class="flex items-center justify-center gap-2">
+									<div class="mr-8 flex items-center justify-center gap-2">
 										<div>{group.active ? 'Active' : 'Passive'}</div>
 										<form
 											bind:this={toggleFormState[group.id]}

@@ -25,3 +25,7 @@ export function generateRandomToken(length: number, alphabet: boolean = false) {
 export function stripNonAlnumAscii(s: string): string {
 	return s.replace(/[^A-Za-z0-9]/g, '');
 }
+
+export function isPortrait(window: Window) {
+	return window.innerHeight > window.innerWidth;
+}

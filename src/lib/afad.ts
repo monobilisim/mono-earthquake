@@ -148,7 +148,8 @@ export class KoeriParser {
 						continue;
 					}
 
-					const eventDateTime = new Date(afadEarthquake.date);
+					const eventDateTimeUTC = new Date(afadEarthquake.date);
+					const eventDateTime = new Date(eventDateTimeUTC.getTime() + 3 * 60 * 60 * 1000); // Convert UTC to GMT+3
 
 					if (isNaN(eventDateTime.getTime())) {
 						console.warn('Invalid date format:', afadEarthquake.date);

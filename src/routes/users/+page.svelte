@@ -415,7 +415,7 @@
 							<Table.Cell>{user.groups}</Table.Cell>
 							<Table.Cell
 								><div class="flex items-center justify-between">
-									<div class="flex gap-2">
+									<div class="mr-8 flex gap-2">
 										<div>{user.active ? 'Active' : 'Passive'}</div>
 										<form
 											bind:this={toggleFormState[user.id]}

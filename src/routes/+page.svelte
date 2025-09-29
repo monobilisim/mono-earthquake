@@ -14,6 +14,8 @@
 	import { toast } from 'svelte-sonner';
 	const { data } = $props();
 
+	import { isPortrait } from '$lib/utils';
+
 	let phone_number: string = $state('');
 	let activation_token: string = $state('');
 
@@ -93,7 +95,7 @@
 		date: { start, end }
 	});
 
-	const url = $derived(new URL(page.url));
+	const url = new URL(page.url);
 
 	if (url.searchParams.get('min_magnitude')) {
 		earthquakeFilters.magnitude[0] = url.searchParams.get('min_magnitude') as never;
@@ -101,12 +103,18 @@
 	if (url.searchParams.get('max_magnitude')) {
 		earthquakeFilters.magnitude[1] = url.searchParams.get('max_magnitude') as never;
 	}
+
+	let isInPortrait = $state(false);
+
+	$effect(() => {
+		isInPortrait = isPortrait(window);
+	});
 </script>
 
 {#if user.name}
-	<div class="grid h-full w-full grid-rows-2 gap-4 p-4">
-		<div class="mb-4 grid grid-cols-2 gap-4">
-			<Card.Root class="min-h-80">
+	<div class="flex h-screen w-full flex-col gap-2 overflow-scroll p-4 lg:p-8">
+		<div class="mb-4 grid grid-cols-1 grid-rows-2 gap-4 pb-0! md:grid-cols-2 md:grid-rows-1">
+			<Card.Root class="h-96">
 				<Card.Header>
 					<Card.Title class="flex w-full items-center justify-between">
 						<div class="flex items-center gap-2">
@@ -162,34 +170,32 @@
 						</Dialog.Root>
 					</Card.Title>
 				</Card.Header>
-				<Card.Content class="flex flex-1 flex-col p-0">
-					<div class="max-h-84 flex-1 overflow-auto">
-						<Table.Root>
-							<Table.Header>
-								<Table.Row>
-									<Table.Head class="w-[100px] text-center">ID</Table.Head>
-									<Table.Head class="w-[100px] text-center">Magnitude</Table.Head>
-									<Table.Head class="text-center">Location</Table.Head>
-									<Table.Head class="text-center">Time</Table.Head>
+				<Card.Content class="h-96 overflow-scroll">
+					<Table.Root>
+						<Table.Header>
+							<Table.Row>
+								<Table.Head class="w-[100px] text-center">ID</Table.Head>
+								<Table.Head class="w-[100px] text-center">Magnitude</Table.Head>
+								<Table.Head class="text-center">Location</Table.Head>
+								<Table.Head class="text-center">Time</Table.Head>
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
+							{#each earthquakes as earthquake}
+								<Table.Row
+									class={'cursor-pointer' +
+										(selectedEarthquake === earthquake.id ? ' bg-muted' : '')}
+									onclick={() =>
+										(selectedEarthquake = earthquake.id) && getFeedbacks(earthquake.id)}
+								>
+									<Table.Cell class="text-center font-medium">{earthquake.id}</Table.Cell>
+									<Table.Cell class="text-center font-medium">{earthquake.magnitude}</Table.Cell>
+									<Table.Cell class="text-center">{earthquake.location}</Table.Cell>
+									<Table.Cell class="text-center">{earthquake.time}</Table.Cell>
 								</Table.Row>
-							</Table.Header>
-							<Table.Body>
-								{#each earthquakes as earthquake}
-									<Table.Row
-										class={'cursor-pointer' +
-											(selectedEarthquake === earthquake.id ? ' bg-muted' : '')}
-										onclick={() =>
-											(selectedEarthquake = earthquake.id) && getFeedbacks(earthquake.id)}
-									>
-										<Table.Cell class="text-center font-medium">{earthquake.id}</Table.Cell>
-										<Table.Cell class="text-center font-medium">{earthquake.magnitude}</Table.Cell>
-										<Table.Cell class="text-center">{earthquake.location}</Table.Cell>
-										<Table.Cell class="text-center">{earthquake.time}</Table.Cell>
-									</Table.Row>
-								{/each}
-							</Table.Body>
-						</Table.Root>
-					</div>
+							{/each}
+						</Table.Body>
+					</Table.Root>
 				</Card.Content>
 			</Card.Root>
 
@@ -198,80 +204,107 @@
 					<Card.Title>Additional statistics (last 30 days)</Card.Title>
 				</Card.Header>
 
-				<Card.Content class="h-full w-full ">
-					<div class="grid grid-cols-3 grid-rows-1 gap-4">
-						<div class="col-span-1 h-full w-full">
-							<label class="bold mb-2"
-								>Messages sent
-								<Chart.Container config={chartConfig} class="h-full max-h-80 w-full">
-									<PieChart
-										data={chartData}
-										key="stats"
-										value="value"
-										c="color"
-										innerRadius={60}
-										padding={24}
-										props={{ pie: { motion: 'tween' } }}
-									>
-										{#snippet aboveMarks()}
-											<Text
-												value={String(totalMessages)}
-												textAnchor="middle"
-												verticalAnchor="middle"
-												class="fill-foreground text-3xl! font-bold"
-												dy={3}
-											/>
-											<Text
-												value="Total"
-												textAnchor="middle"
-												verticalAnchor="middle"
-												class="fill-muted-foreground! text-muted-foreground"
-												dy={22}
-											/>
-										{/snippet}
-										{#snippet tooltip()}
-											<Chart.Tooltip hideLabel />
-										{/snippet}
-									</PieChart>
-								</Chart.Container>
-							</label>
+				<Card.Content class="h-full w-full">
+					{#if isInPortrait}
+						<div>
+							Messages sent
+							<br />
+							Successful:
+							{last30DaysFeedbackStats.successful}
+							<br />
+							Failed:
+							{last30DaysFeedbackStats.failed}
+							<br />
+							Total: {totalMessages}
 						</div>
+						<div>
+							Earthquakes
+							{#each last30DaysEarthquakeStats.days as day}
+								{#if Number(day.count) > 0}
+									<div class="mt-2">
+										{day.date}: {day.count}
+									</div>
+								{/if}
+							{/each}
+						</div>
+					{:else}
+						<div class="grid grid-cols-3 grid-rows-1 gap-4">
+							<div class="col-span-1 h-full w-full">
+								<label class="bold mb-2"
+									>Messages sent
+									<Chart.Container config={chartConfig} class="max-h-64 w-full md:max-h-80">
+										<PieChart
+											data={chartData}
+											key="stats"
+											value="value"
+											c="color"
+											innerRadius={isInPortrait ? 40 : 60}
+											padding={isInPortrait ? 12 : 24}
+											props={{ pie: { motion: 'tween' } }}
+										>
+											{#snippet aboveMarks()}
+												<Text
+													value={String(totalMessages)}
+													textAnchor="middle"
+													verticalAnchor="middle"
+													class="fill-foreground text-3xl! font-bold"
+													dy={3}
+												/>
+												<Text
+													value={isInPortrait ? '' : 'Total'}
+													textAnchor="middle"
+													verticalAnchor="middle"
+													class="fill-muted-foreground! text-muted-foreground"
+													dy={22}
+												/>
+											{/snippet}
+											{#snippet tooltip()}
+												<Chart.Tooltip hideLabel />
+											{/snippet}
+										</PieChart>
+									</Chart.Container>
+								</label>
+							</div>
 
-						<div class="col-span-2">
-							<label class="bold">
-								Daily earthquake count
-								<Chart.Container config={chart2Config} class=" aspect-auto h-[200px] w-full">
-									<BarChart
-										bind:context
-										data={chart2Data}
-										x="date"
-										y="count"
-										axis="x"
-										series={[{ key: 'count', label: 'Earthquakes', color: 'var(--chart-1)' }]}
-										props={{
-											bars: {
-												stroke: 'none',
-												rounded: 'none',
-												initialY: context?.height,
-												initialHeight: 0,
-												motion: {
-													y: { type: 'tween', duration: 500, easing: cubicInOut },
-													height: { type: 'tween', duration: 500, easing: cubicInOut }
+							<div class="col-span-2">
+								<label class="bold">
+									Daily earthquake count
+									<Chart.Container config={chart2Config} class="aspect-auto h-[200px] w-full">
+										<BarChart
+											bind:context
+											data={chart2Data}
+											x="date"
+											y="count"
+											axis="x"
+											series={[{ key: 'count', label: 'Earthquakes', color: 'var(--chart-1)' }]}
+											props={{
+												bars: {
+													stroke: 'none',
+													rounded: 'none',
+													initialY: context?.height,
+													initialHeight: 0,
+													motion: {
+														y: { type: 'tween', duration: 500, easing: cubicInOut },
+														height: { type: 'tween', duration: 500, easing: cubicInOut }
+													}
+												},
+												xAxis: {
+													format: (d: Date) => {
+														if (isInPortrait) {
+															return '';
+														}
+
+														const str = d.toString();
+														return str.slice(-2);
+													}
 												}
-											},
-											xAxis: {
-												format: (d: Date) => {
-													const str = d.toString();
-													console.log(str);
-													return str.slice(-2);
-												}
-											}
-										}}
-									/>
-								</Chart.Container>
-							</label>
+											}}
+										/>
+									</Chart.Container>
+								</label>
+							</div>
 						</div>
-					</div>
+					{/if}
 				</Card.Content>
 			</Card.Root>
 		</div>
@@ -279,55 +312,58 @@
 			<Card.Header>
 				<Card.Title>Feedbacks</Card.Title>
 			</Card.Header>
-			<Card.Content>
-				{#if selectedEarthquake === 0}
-					<!-- Get all -->
-					<p class="text-sm text-muted-foreground">Please select an earthquake to see feedbacks.</p>
-				{:else}
-					<!-- Get by id -->
-					<Table.Root>
-						<Table.Header>
-							<Table.Row>
-								<Table.Cell class="w-16">ID</Table.Cell>
-								<Table.Cell class="w-64">Name</Table.Cell>
-								<Table.Cell class="w-64">Phone Number</Table.Cell>
-								<Table.Cell class="w-128">Status</Table.Cell>
-								<Table.Cell class="w-128">Message</Table.Cell>
-								<Table.Cell>Updated At</Table.Cell>
-							</Table.Row>
-						</Table.Header>
-						<Table.Body>
-							{#if isFeedbacksEmpty}
+			<Card.Content class="oveflow-hidden p-0">
+				<div class="h-96 flex-1 overflow-auto 2xl:h-128">
+					{#if selectedEarthquake === 0}
+						<p class="text-sm text-muted-foreground">
+							Please select an earthquake to see feedbacks.
+						</p>
+					{:else}
+						<!-- Get by id -->
+						<Table.Root>
+							<Table.Header>
 								<Table.Row>
-									<Table.Cell colspan={6} class="text-center">
-										<p class="text-sm text-muted-foreground">
-											No feedbacks available for this earthquake.
-										</p>
-									</Table.Cell>
+									<Table.Cell class="w-16">ID</Table.Cell>
+									<Table.Cell class="w-64">Name</Table.Cell>
+									<Table.Cell class="w-64">Phone Number</Table.Cell>
+									<Table.Cell class="w-128">Status</Table.Cell>
+									<Table.Cell class="w-128">Message</Table.Cell>
+									<Table.Cell>Updated At</Table.Cell>
 								</Table.Row>
-							{/if}
+							</Table.Header>
+							<Table.Body>
+								{#if isFeedbacksEmpty}
+									<Table.Row>
+										<Table.Cell colspan={6} class="text-center">
+											<p class="text-sm text-muted-foreground">
+												No feedbacks available for this earthquake.
+											</p>
+										</Table.Cell>
+									</Table.Row>
+								{/if}
 
-							{#each feedbacks as feedback (feedback.id)}
-								<Table.Row>
-									<Table.Cell>{feedback.user_id}</Table.Cell>
-									<Table.Cell>{feedback.name}</Table.Cell>
-									<Table.Cell>{feedback.phone_number}</Table.Cell>
-									<Table.Cell>
-										<div class="rounded-lg *:px-4 *:py-1">
-											{#if feedback.is_read}
-												<span class="bg-green-300 font-medium dark:text-black">Read</span>
-											{:else}
-												<span class="bg-red-300 font-medium dark:text-black">Not Read</span>
-											{/if}
-										</div>
-									</Table.Cell>
-									<Table.Cell>{feedback.message}</Table.Cell>
-									<Table.Cell>{feedback.updated_at}</Table.Cell>
-								</Table.Row>
-							{/each}
-						</Table.Body>
-					</Table.Root>
-				{/if}
+								{#each feedbacks as feedback (feedback.id)}
+									<Table.Row>
+										<Table.Cell>{feedback.user_id}</Table.Cell>
+										<Table.Cell>{feedback.name}</Table.Cell>
+										<Table.Cell>{feedback.phone_number}</Table.Cell>
+										<Table.Cell>
+											<div class="rounded-lg *:px-4 *:py-1">
+												{#if feedback.is_read}
+													<span class="bg-green-300 font-medium dark:text-black">Read</span>
+												{:else}
+													<span class="bg-red-300 font-medium dark:text-black">Not Read</span>
+												{/if}
+											</div>
+										</Table.Cell>
+										<Table.Cell>{feedback.message}</Table.Cell>
+										<Table.Cell>{feedback.updated_at}</Table.Cell>
+									</Table.Row>
+								{/each}
+							</Table.Body>
+						</Table.Root>
+					{/if}
+				</div>
 			</Card.Content>
 		</Card.Root>
 	</div>
