@@ -285,7 +285,7 @@
 						</Dialog.Root>
 					</Card.Title>
 				</Card.Header>
-				<Card.Content class="overflow-scroll">
+				<Card.Content class="overflow-scroll max-h-64 md:max-h-96">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>

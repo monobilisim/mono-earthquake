@@ -3,15 +3,15 @@ import type { ServerInit } from '@sveltejs/kit';
 const POLL_INTERVAL: number = parseInt(<any>Bun.env.POLL_INTERVAL) || 60;
 
 export const init: ServerInit = async () => {
-	const afadWorker = () => {
+	const EqWorker = () => {
 		Bun.spawn({
-			cmd: ['bun', '--bun', './src/lib/afad-worker.ts'],
+			cmd: ['bun', '--bun', './src/lib/eq-worker.ts'],
 			stdout: 'inherit',
 			stderr: 'inherit'
 		});
 	};
 
-	afadWorker();
+	EqWorker();
 
-	setInterval(afadWorker, POLL_INTERVAL * 1000);
+	setInterval(EqWorker, POLL_INTERVAL * 1000);
 };

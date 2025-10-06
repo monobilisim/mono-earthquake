@@ -1,4 +1,5 @@
-import { KoeriParser } from './afad';
+import { AfadParser, type EarthquakeData } from './afad';
+import { KoeriParser } from './koeri';
 import sql from '$lib/db';
 
 type Poll = {
@@ -14,17 +15,34 @@ if (Bun.env.BUILD_STEP) {
 
 const PHONE_NUMBER_ID = Bun.env.PHONE_NUMBER_ID;
 const WHATSAPP_TOKEN = Bun.env.WHATSAPP_TOKEN;
-
+const EARTHQUAKE_SOURCE = Bun.env.EARTHQUAKE_SOURCE;
 try {
 	const polls: Poll[] = await sql`SELECT id, name, type, threshold FROM polls`;
-
-	const parser = new KoeriParser();
-	const newRecords = await parser.saveToDatabase();
 
 	if (polls.length === 0) {
 		console.log('No polls found in the database.');
 		process.exit(0);
 	}
+
+  let newRecords: EarthquakeData[] = [];
+  let afadNewRecords: EarthquakeData[] = [];
+  let koeriNewRecords: EarthquakeData[] = [];
+
+  if (EARTHQUAKE_SOURCE === "afad" || EARTHQUAKE_SOURCE === "all") {
+   	const afadParser = new AfadParser();
+    afadNewRecords = await afadParser.saveToDatabase();
+    newRecords = newRecords.concat(afadNewRecords);
+  }
+
+  if (EARTHQUAKE_SOURCE === "koeri" || EARTHQUAKE_SOURCE === "all") {
+    const koeriParser = new KoeriParser();
+    koeriNewRecords = await koeriParser.saveToDatabase();
+    newRecords = newRecords.concat(koeriNewRecords);
+  }
+
+  console.log("afad earthquakes: ", afadNewRecords);
+
+  console.log("koeri earthquakes: ", koeriNewRecords)
 
 	const earthquakePoll = <Poll>polls.find((poll) => poll.name === 'deprem');
 	const pollType = earthquakePoll.type;

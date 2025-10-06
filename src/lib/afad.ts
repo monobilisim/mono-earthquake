@@ -56,7 +56,7 @@ interface AfadEarthquake {
 // Constants
 const AFAD_URL = 'https://deprem.afad.gov.tr/apiv2/event/filter';
 
-export class KoeriParser {
+export class AfadParser {
 	async fetchData(
 		options: {
 			startDate?: string;
