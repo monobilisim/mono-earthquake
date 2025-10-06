@@ -1,7 +1,7 @@
 import sql from '$lib/db';
 
 try {
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS earthquakes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -23,7 +23,7 @@ try {
     UNIQUE(timestamp, latitude, longitude)
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS webhooks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(255) NOT NULL,
@@ -35,7 +35,7 @@ try {
     UNIQUE(name)
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS polls (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(255) NOT NULL UNIQUE,
@@ -44,7 +44,7 @@ try {
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS wa_messages (
     id TEXT PRIMARY KEY,
     user_id INTEGER NOT NULL,
@@ -56,7 +56,7 @@ try {
     created_at TEXT NOT NULL
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS wa_messages_failed (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -66,7 +66,7 @@ try {
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(255) NOT NULL UNIQUE,
@@ -76,7 +76,7 @@ try {
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(255) NOT NULL UNIQUE,
@@ -90,7 +90,7 @@ try {
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -99,7 +99,7 @@ try {
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 )`;
 
-	await sql`
+  await sql`
 	CREATE TABLE IF NOT EXISTS user_groups (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	name TEXT NOT NULL UNIQUE,
@@ -108,5 +108,5 @@ try {
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 } catch (error) {
-	console.error('Error creating tables:', error);
+  console.error('Error creating tables:', error);
 }
