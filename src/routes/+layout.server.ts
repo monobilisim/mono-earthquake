@@ -6,6 +6,7 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
 		sessionActive: boolean;
 	};
 
+	let sessionActive: boolean = false;
 	let user: User | null = null;
 
 	try {
@@ -17,14 +18,20 @@ export const load: LayoutServerLoad = async ({ cookies }) => {
 			if (!user.name || user.name === '') {
 				cookies.delete('session', { secure: true, sameSite: 'strict', httpOnly: true, path: '/' });
 
-				return { sessionActive: false, user } as SessionActive;
+				sessionActive = false;
+
+				return { sessionActive, user };
 			}
 
-			return { sessionActive: true, user } as SessionActive;
+			sessionActive = true;
+
+			return { sessionActive, user };
 		} else {
-			return { sessionActive: false, user } as SessionActive;
+			sessionActive = false;
+			return { sessionActive, user };
 		}
 	} catch (error) {
-		return { sessionActive: false, user } as SessionActive;
+		sessionActive = false;
+		return { sessionActive, user };
 	}
 };

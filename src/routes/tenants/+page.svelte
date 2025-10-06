@@ -54,10 +54,12 @@
 	let newGroupPollsMulti: string[] = $state([]);
 
 	let groupToggleState: Record<number, boolean> = $state(
+		// svelte-ignore state_referenced_locally
 		Object.fromEntries(groups.map((g) => [g.id, g.active]))
 	);
 
 	let toggleFormState: Record<string, HTMLFormElement> = $state(
+		// svelte-ignore state_referenced_locally
 		Object.fromEntries(groups.map((g) => [g.id]))
 	);
 
@@ -170,12 +172,14 @@
 				{#if newGroup}
 					<div>
 						<Button
+							class="bg-green-500 text-white hover:bg-green-600 focus:ring-green-600"
 							onclick={() => {
 								newGroup = false;
 								newGroupAdd();
 							}}>Save</Button
 						>
 						<Button
+							class="bg-red-500 text-white hover:bg-red-600 focus:ring-red-600"
 							onclick={() => {
 								newGroup = false;
 							}}>Cancel</Button
@@ -281,7 +285,10 @@
 							<Table.Cell>{group.polls}</Table.Cell>
 							<Table.Cell>
 								<div class="flex items-center justify-between">
-									<div class="mr-8 flex items-center justify-center gap-2">
+									<div
+										class={'mr-8 flex items-center justify-center ' +
+											(group.active ? 'gap-4' : 'gap-2')}
+									>
 										<div>{group.active ? 'Active' : 'Passive'}</div>
 										<form
 											bind:this={toggleFormState[group.id]}
@@ -290,7 +297,8 @@
 											use:enhance={() => {
 												return async ({ result }) => {
 													if (result.type === 'failure') {
-														toast.error(result.data);
+														const error = String(result.data ?? 'Error while toggling the tenant');
+														toast.error(error);
 													}
 
 													if (result.type === 'success') {

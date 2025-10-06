@@ -82,6 +82,7 @@ try {
     name VARCHAR(255) NOT NULL UNIQUE,
     phone_number VARCHAR(20) DEFAULT NULL,
     groups TEXT DEFAULT NULL,
+    user_group TEXT DEFAULT NULL,
     roles TEXT DEFAULT NULL,
     activation_token VARCHAR(255) DEFAULT NULL,
     active BOOLEAN NOT NULL DEFAULT 1,
@@ -96,6 +97,15 @@ try {
     session_token TEXT NOT NULL UNIQUE,
     expiration_date DATETIME NOT NULL DEFAULT (DATETIME('now', '+7 days')),
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+)`;
+
+	await sql`
+	CREATE TABLE IF NOT EXISTS user_groups (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL UNIQUE,
+	tenant TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`;
 } catch (error) {
 	console.error('Error creating tables:', error);

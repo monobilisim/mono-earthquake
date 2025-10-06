@@ -6,5 +6,9 @@ export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	optimizeDeps: {
 		exclude: ['lightningcss', 'lightningcss-linux-x64-gnu', '@tailwindcss/node']
+	},
+	server: {
+		port: 5173,
+		host: true
 	}
 });

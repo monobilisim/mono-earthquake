@@ -4,7 +4,6 @@
 	import { Slider } from '$lib/components/ui/slider/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import * as Table from '$lib/components/ui/table/index.js';
-	import * as Chart from '$lib/components/ui/chart/index.js';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import { cubicInOut } from 'svelte/easing';
 	import * as Devalue from 'devalue';
@@ -12,10 +11,14 @@
 	import { enhance } from '$app/forms';
 	import { page } from '$app/state';
 	import { toast } from 'svelte-sonner';
+	import { onMount } from 'svelte';
+	import Chart, { type ChartItem } from 'chart.js/auto';
+
 	const { data } = $props();
 
 	import { isPortrait } from '$lib/utils';
 
+	let whatsappMessageSent = $state(false);
 	let phone_number: string = $state('');
 	let activation_token: string = $state('');
 
@@ -57,33 +60,6 @@
 		}
 	}
 
-	import { PieChart, Text, BarChart, type ChartContextValue } from 'layerchart';
-
-	const chartData = [
-		{
-			stats: 'successful',
-			value: last30DaysFeedbackStats.successful,
-			color: 'var(--color-successful)'
-		},
-		{ stats: 'failed', value: last30DaysFeedbackStats.failed, color: 'var(--color-failed)' }
-	];
-
-	const chartConfig = {
-		total: { label: 'Total' },
-		successful: { label: 'Successful', color: 'var(--chart-2)' },
-		failed: { label: 'Failed', color: 'var(--chart-5)' }
-	} satisfies Chart.ChartConfig;
-
-	const totalMessages = chartData.reduce((acc, curr) => acc + curr.value, 0);
-
-	const chart2Data = last30DaysEarthquakeStats.days;
-
-	const chart2Config = {
-		count: { label: 'Earthquakes', color: 'hsl(var(--chart-1))' }
-	} satisfies Chart.ChartConfig;
-
-	let context = $state<ChartContextValue>();
-
 	import { getLocalTimeZone, today } from '@internationalized/date';
 	import { RangeCalendar } from '$lib/components/ui/range-calendar/index.js';
 
@@ -109,12 +85,145 @@
 	$effect(() => {
 		isInPortrait = isPortrait(window);
 	});
+
+	// @ts-expect-error ignore
+	let canvasEl: HTMLCanvasElement = $state();
+	// @ts-expect-error ignore
+	let canvas2El: HTMLCanvasElement = $state();
+
+	let chart2Data: Record<string, string>[] | string[] = last30DaysEarthquakeStats.days; // e.g. [{ date: '2025-10-01', count: 5 }, ...]
+	const labels = chart2Data.map((d) => {
+		return d.date.toString().slice(-2);
+	});
+	chart2Data = chart2Data.map((d) => d.count);
+
+	onMount(() => {
+		const chartData = [
+			{
+				label: 'Successful',
+				value: last30DaysFeedbackStats.successful,
+				color: getComputedStyle(document.documentElement).getPropertyValue('--color-successful')
+			},
+			{
+				label: 'Failed',
+				value: last30DaysFeedbackStats.failed,
+				color: getComputedStyle(document.documentElement).getPropertyValue('--color-failed')
+			}
+		];
+
+		const totalMessages = chartData.reduce((acc, curr) => acc + curr.value, 0);
+
+		const centerTextPlugin = {
+			id: 'centerText',
+			afterDraw(chart: any) {
+				const {
+					ctx,
+					chartArea: { left, right, top, bottom, width, height }
+				} = chart;
+
+				ctx.save();
+				ctx.font = 'bold 20px sans-serif';
+				ctx.fillStyle =
+					getComputedStyle(document.documentElement).getPropertyValue('--foreground') || '#000';
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+
+				// center of chart area
+				const centerX = left + width / 2;
+				const centerY = top + height / 2;
+
+				ctx.fillText(String(totalMessages), centerX, centerY);
+
+				if (!isInPortrait) {
+					ctx.font = '14px sans-serif';
+					ctx.fillStyle =
+						getComputedStyle(document.documentElement).getPropertyValue('--muted-foreground') ||
+						'#fff';
+					ctx.fillText('Messages Sent', centerX, centerY + 24);
+				}
+				ctx.restore();
+			}
+		};
+
+		// @ts-ignore
+		new Chart(canvasEl, {
+			type: 'doughnut',
+			data: {
+				labels: chartData.map((d) => d.label),
+				datasets: [
+					{
+						data: chartData.map((d) => d.value),
+						backgroundColor: chartData.map((d) => d.color),
+						borderWidth: 0
+					}
+				]
+			},
+			options: {
+				cutout: '60%',
+				plugins: {
+					tooltip: {
+						enabled: true,
+						displayColors: true,
+						callbacks: {
+							label: (context) => `${context.label}: ${context.parsed}`
+						}
+					},
+					legend: { display: true, position: 'bottom' }
+				}
+			},
+			plugins: [centerTextPlugin]
+		});
+
+		const chart2Config = {
+			type: 'bar' as const,
+			data: {
+				labels,
+				datasets: [
+					{
+						label: 'Earthquakes',
+						data: chart2Data,
+
+						backgroundColor: getComputedStyle(document.documentElement)
+							.getPropertyValue('--chart2-color')
+							.trim(),
+						borderRadius: 0
+					}
+				]
+			},
+			options: {
+				animation: {
+					duration: 500,
+					easing: 'easeInOutCubic'
+				},
+				scales: {
+					x: {
+						ticks: {
+							callback: (value: any, index: number) => labels[index]
+						}
+					},
+					y: {
+						beginAtZero: true
+					}
+				},
+				plugins: {
+					legend: {
+						display: true
+					}
+				},
+				responsive: true,
+				maintainAspectRatio: true
+			}
+		};
+
+		// @ts-expect-error ignore
+		new Chart(canvas2El, chart2Config);
+	});
 </script>
 
 {#if user.name}
 	<div class="flex h-screen w-full flex-col gap-2 overflow-scroll p-4 lg:p-8">
-		<div class="mb-4 grid grid-cols-1 grid-rows-2 gap-4 pb-0! md:grid-cols-2 md:grid-rows-1">
-			<Card.Root class="h-96">
+		<div class="mb-4 grid auto-rows-auto grid-cols-1 gap-4 md:grid-cols-2 md:gap-4">
+			<Card.Root>
 				<Card.Header>
 					<Card.Title class="flex w-full items-center justify-between">
 						<div class="flex items-center gap-2">
@@ -124,7 +233,9 @@
 							{/if}
 						</div>
 						<Dialog.Root>
-							<Dialog.Trigger><Button>Filters</Button></Dialog.Trigger>
+							<Dialog.Trigger>
+								<Button>Filters</Button>
+							</Dialog.Trigger>
 							<Dialog.Content>
 								<Dialog.Header>
 									<Dialog.Title>Filters</Dialog.Title>
@@ -150,8 +261,10 @@
 											const url = new URL(window.location.pathname, window.location.origin);
 
 											window.location.href = url.toString();
-										}}>Clear Filters</Button
+										}}
 									>
+										Clear Filters
+									</Button>
 
 									<Button
 										onclick={async () => {
@@ -163,14 +276,16 @@
 
 											window.location.href = url.toString();
 											// goto(url.toString(), { replaceState: true, invalidateAll: true });
-										}}>Apply Filters</Button
+										}}
 									>
+										Apply Filters
+									</Button>
 								</Dialog.Close>
 							</Dialog.Content>
 						</Dialog.Root>
 					</Card.Title>
 				</Card.Header>
-				<Card.Content class="h-96 overflow-scroll">
+				<Card.Content class="overflow-scroll">
 					<Table.Root>
 						<Table.Header>
 							<Table.Row>
@@ -204,107 +319,20 @@
 					<Card.Title>Additional statistics (last 30 days)</Card.Title>
 				</Card.Header>
 
-				<Card.Content class="h-full w-full">
-					{#if isInPortrait}
-						<div>
-							Messages sent
-							<br />
-							Successful:
-							{last30DaysFeedbackStats.successful}
-							<br />
-							Failed:
-							{last30DaysFeedbackStats.failed}
-							<br />
-							Total: {totalMessages}
-						</div>
-						<div>
-							Earthquakes
-							{#each last30DaysEarthquakeStats.days as day}
-								{#if Number(day.count) > 0}
-									<div class="mt-2">
-										{day.date}: {day.count}
-									</div>
-								{/if}
-							{/each}
-						</div>
-					{:else}
-						<div class="grid grid-cols-3 grid-rows-1 gap-4">
-							<div class="col-span-1 h-full w-full">
-								<label class="bold mb-2"
-									>Messages sent
-									<Chart.Container config={chartConfig} class="max-h-64 w-full md:max-h-80">
-										<PieChart
-											data={chartData}
-											key="stats"
-											value="value"
-											c="color"
-											innerRadius={isInPortrait ? 40 : 60}
-											padding={isInPortrait ? 12 : 24}
-											props={{ pie: { motion: 'tween' } }}
-										>
-											{#snippet aboveMarks()}
-												<Text
-													value={String(totalMessages)}
-													textAnchor="middle"
-													verticalAnchor="middle"
-													class="fill-foreground text-3xl! font-bold"
-													dy={3}
-												/>
-												<Text
-													value={isInPortrait ? '' : 'Total'}
-													textAnchor="middle"
-													verticalAnchor="middle"
-													class="fill-muted-foreground! text-muted-foreground"
-													dy={22}
-												/>
-											{/snippet}
-											{#snippet tooltip()}
-												<Chart.Tooltip hideLabel />
-											{/snippet}
-										</PieChart>
-									</Chart.Container>
-								</label>
-							</div>
-
-							<div class="col-span-2">
-								<label class="bold">
-									Daily earthquake count
-									<Chart.Container config={chart2Config} class="aspect-auto h-[200px] w-full">
-										<BarChart
-											bind:context
-											data={chart2Data}
-											x="date"
-											y="count"
-											axis="x"
-											series={[{ key: 'count', label: 'Earthquakes', color: 'var(--chart-1)' }]}
-											props={{
-												bars: {
-													stroke: 'none',
-													rounded: 'none',
-													initialY: context?.height,
-													initialHeight: 0,
-													motion: {
-														y: { type: 'tween', duration: 500, easing: cubicInOut },
-														height: { type: 'tween', duration: 500, easing: cubicInOut }
-													}
-												},
-												xAxis: {
-													format: (d: Date) => {
-														if (isInPortrait) {
-															return '';
-														}
-
-														const str = d.toString();
-														return str.slice(-2);
-													}
-												}
-											}}
-										/>
-									</Chart.Container>
-								</label>
+				<Card.Content class="flex h-full w-full items-center justify-center">
+					<div class="flex flex-col gap-4 md:flex-row">
+						<div class="h-64 w-full">
+							<div class="bold mb-2 flex h-full w-full flex-col items-center justify-center">
+								<canvas bind:this={canvasEl} class="h-full w-full"></canvas>
 							</div>
 						</div>
-					{/if}
+
+						<div class="h-48 w-80 md:h-64 md:w-128">
+							<div class="bold flex h-full w-full flex-col items-center justify-center">
+								<canvas bind:this={canvas2El} class="h-full w-full"></canvas>
+							</div>
+						</div>
+					</div>
 				</Card.Content>
 			</Card.Root>
 		</div>
@@ -313,9 +341,9 @@
 				<Card.Title>Feedbacks</Card.Title>
 			</Card.Header>
 			<Card.Content class="oveflow-hidden p-0">
-				<div class="h-96 flex-1 overflow-auto 2xl:h-128">
+				<div class="flex-1 overflow-auto 2xl:h-128">
 					{#if selectedEarthquake === 0}
-						<p class="text-sm text-muted-foreground">
+						<p class="w-full text-center text-sm text-muted-foreground">
 							Please select an earthquake to see feedbacks.
 						</p>
 					{:else}
@@ -369,87 +397,95 @@
 	</div>
 {:else}
 	<div class="flex h-full w-full flex-col items-center justify-center gap-4">
-		<Card.Root class="h-104 w-[350px]">
+		<Card.Root class=" w-[350px]">
 			<Card.Header>
-				<Card.Title class="text-2xl">Login or Sign Up</Card.Title>
+				<Card.Title class="text-2xl">Login</Card.Title>
 				<Card.Description class="text-muted-foreground">
 					Enter your phone number to get started
 				</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				{#if sendTokenError}
-					<p class="text-sm text-red-500">{sendTokenError}</p>
+				{#if !whatsappMessageSent}
+					<form
+						action="?/sendToken"
+						method="POST"
+						use:enhance={async () => {
+							return async ({ result }) => {
+								if (result.type === 'failure') {
+									const error = String(result.data ?? 'Error while sending the token');
+									toast.error(error);
+								}
+
+								if (result.type === 'success') {
+									toast.success('Successfully sent the token. Please check your Whatsapp.');
+									whatsappMessageSent = true;
+								}
+
+								const url = new URL(window.location.pathname, window.location.origin);
+								url.searchParams.set('phone_number', phone_number);
+
+								goto(url.toString());
+							};
+						}}
+					>
+						<label
+							>Phone Number
+							<Input name="phone_number" placeholder="5554443322" bind:value={phone_number} />
+						</label>
+
+						<div class="mt-4 flex justify-between">
+							<Button type="submit">Send code</Button>
+							<Button onclick={() => (whatsappMessageSent = true)}>I have code</Button>
+						</div>
+					</form>
+				{:else}
+					<form
+						action="?/verifyToken"
+						method="POST"
+						use:enhance={async () => {
+							return async ({ result }) => {
+								if (result.type === 'failure') {
+									const error = String(result.data ?? 'Error while verifying the token');
+									toast.error(error);
+								}
+
+								if (result.type === 'success') {
+									toast.success('Successfully verified the token. You are now logged in.');
+								}
+
+								window.location.reload();
+							};
+						}}
+					>
+						<label
+							>Phone Number
+							<Input name="phone_number" placeholder="5554443322" bind:value={phone_number} />
+						</label>
+						<label
+							>Token
+							<Input
+								name="activation_token"
+								placeholder="6 letter token"
+								bind:value={activation_token}
+							/>
+						</label>
+
+						<div class="mt-4 flex justify-between">
+							<Button onclick={() => (whatsappMessageSent = false)}>Return</Button>
+
+							<Button type="submit">Verify</Button>
+						</div>
+					</form>
 				{/if}
-				<form
-					action="?/sendToken"
-					method="POST"
-					use:enhance={async () => {
-						return async ({ result, update }) => {
-							console.log(result);
-
-							if (result.type === 'failure') {
-								toast.error(result.data);
-							}
-
-							if (result.type === 'success') {
-								toast.success('Successfully sent the token. Please check your Whatsapp.');
-							}
-
-							const url = new URL(window.location.pathname, window.location.origin);
-							url.searchParams.set('phone_number', phone_number);
-
-							goto(url.toString());
-						};
-					}}
-				>
-					<label
-						>Phone Number
-						<Input name="phone_number" placeholder="905554443322" bind:value={phone_number} />
-					</label>
-
-					<Button class="mt-2" type="submit">Send code</Button>
-				</form>
-
-				<br />
-
-				{#if verifyTokenError}
-					<p class="text-sm text-red-500">{verifyTokenError}</p>
-				{/if}
-				<form
-					action="?/verifyToken"
-					method="POST"
-					use:enhance={async () => {
-						return async ({ result, update }) => {
-							console.log(result);
-
-							if (result.type === 'failure') {
-								toast.error(result.data);
-							}
-
-							if (result.type === 'success') {
-								toast.success('Successfully verified the token. You are now logged in.');
-							}
-
-							window.location.reload();
-						};
-					}}
-				>
-					<label
-						>Phone Number
-						<Input name="phone_number" placeholder="905554443322" bind:value={phone_number} />
-					</label>
-					<label
-						>Token
-						<Input
-							name="activation_token"
-							placeholder="6 letter token"
-							bind:value={activation_token}
-						/>
-					</label>
-
-					<Button class="mt-2" type="submit">Verify</Button>
-				</form>
 			</Card.Content>
 		</Card.Root>
 	</div>
 {/if}
+
+<style>
+	:root {
+		--color-successful: #22c55e;
+		--color-failed: #ef4444;
+		--chart2-color: #3b82f6;
+	}
+</style>

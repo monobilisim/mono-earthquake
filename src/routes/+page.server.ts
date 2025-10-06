@@ -236,10 +236,14 @@ export const actions: Actions = {
 	sendToken: async ({ cookies, request }) => {
 		const formData = await request.formData();
 
-		const phone_number = formData.get('phone_number') || undefined;
+		let phone_number = formData.get('phone_number') || undefined;
 
 		if (!phone_number) {
 			return fail(400, 'Phone number does not exists');
+		}
+
+		if (phone_number.slice(0, 2) !== '90') {
+			phone_number = '90' + phone_number;
 		}
 
 		const user =
@@ -314,7 +318,7 @@ export const actions: Actions = {
 		const formData = await request.formData();
 
 		const activation_token = formData.get('activation_token') || undefined;
-		const phone_number = formData.get('phone_number') || undefined;
+		let phone_number = formData.get('phone_number') || undefined;
 
 		if (!activation_token) {
 			return fail(400, 'Token does not exists');
@@ -322,6 +326,10 @@ export const actions: Actions = {
 
 		if (!phone_number) {
 			return fail(400, 'Phone number does not exists');
+		}
+
+		if (phone_number.slice(0, 2) !== '90') {
+			phone_number = '90' + phone_number;
 		}
 
 		const user =

@@ -1,6 +1,5 @@
 import sql from '$lib/db';
 
-// Types and interfaces
 export interface EarthquakeData {
 	timestamp: string;
 	date: string;
@@ -83,7 +82,7 @@ export class KoeriParser {
 				format: 'json',
 				orderby: 'timedesc',
 				limit: (options.limit || 500).toString(),
-				minmag: minimumPollThreshold.toString()
+				minmag: (minimumPollThreshold - 0.1).toString()
 			});
 
 			if (options.minMagnitude !== undefined) {
@@ -95,7 +94,7 @@ export class KoeriParser {
 			}
 
 			const url = `${AFAD_URL}?${params.toString()}`;
-			// console.log(`Fetching from ${url}`);
+			console.log(`Fetching from ${url}`);
 
 			const headers = {
 				'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',

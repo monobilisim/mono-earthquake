@@ -37,6 +37,12 @@
 				role: 'admin'
 			},
 			{
+				title: 'Groups',
+				url: '/usergroups',
+				icon: UsersIcon,
+				role: 'admin'
+			},
+			{
 				title: 'Tenants',
 				url: '/tenants',
 				icon: LayersIcon,
@@ -52,15 +58,15 @@
 	// Get current page to highlight active nav item
 	const currentPath = $derived(page.url.pathname);
 
-	let sidebarOpen: boolean = $state(false);
+	let sidebarOpen: boolean = $state(true);
 
 	let isInPortrait = $state(false);
 
 	$effect(() => {
 		isInPortrait = isPortrait(window);
 
-		if (!isInPortrait) {
-			sidebarOpen = true;
+		if (isInPortrait) {
+			sidebarOpen = false;
 		}
 	});
 </script>
@@ -108,7 +114,7 @@
 	{/if}
 
 	{#if sessionActive && !isInPortrait}
-		<Sidebar.Provider open={sidebarOpen}>
+		<Sidebar.Provider open={sidebarOpen} onOpenChange={() => (sidebarOpen = !sidebarOpen)}>
 			<Sidebar.Root>
 				<div class="flex h-12 items-center justify-between border-b px-3">
 					<div class="flex items-center gap-2">

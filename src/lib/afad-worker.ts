@@ -54,6 +54,13 @@ try {
 						continue;
 					}
 
+					let earthqaukeSource = '';
+					if (record.quality === 'AFAD') {
+						earthqaukeSource = 'AFAD';
+					} else {
+						earthqaukeSource = 'KOERI';
+					}
+
 					for (const user of groupUsers) {
 						if (pollType === 'whatsapp') {
 							console.log(`Sending whatsapp template to user ${user.name} with ID ${user.id}`);
@@ -82,7 +89,7 @@ try {
 															{
 																type: 'text',
 																parameter_name: 'detay',
-																text: `Biraz önce (${record.time}) ${record.location} merkezli, ${record.magnitude} büyüklüğünde`
+																text: `Biraz önce (${record.time}) ${record.location} merkezli, ${record.magnitude} büyüklüğünde (${earthqaukeSource})`
 															}
 														]
 													}
