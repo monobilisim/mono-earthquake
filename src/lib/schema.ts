@@ -20,6 +20,7 @@ try {
     month INTEGER NOT NULL,
     day INTEGER NOT NULL,
     week INTEGER NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(timestamp, latitude, longitude)
 )`;
 

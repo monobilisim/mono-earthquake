@@ -115,9 +115,10 @@ export class AfadParser {
       return await response.text();
     } catch (error) {
       if (error instanceof Error) {
-        throw new Error(`Failed to fetch data from AFAD API: ${error.message}`);
+        console.error(`Failed fetching data from AFAD: ${error.message}`);
+        throw error;
       }
-      throw new Error(`Failed to fetch data from AFAD API: Unknown error`);
+      throw new Error(`Failed to fetch data from AFAD: Unknown error`);
     }
   }
 
@@ -190,7 +191,7 @@ export class AfadParser {
       return earthquakes;
     } catch (error) {
       console.error('Error parsing JSON data:', error);
-      throw new Error('Failed to parse earthquake data from AFAD API');
+      throw new Error('Failed to parse earthquake data from AFAD');
     }
   }
 
@@ -207,7 +208,10 @@ export class AfadParser {
       const rawData = await this.fetchData(options);
       return this.parseData(rawData);
     } catch (error) {
-      console.error(`Error getting earthquake data: ${error}`);
+      // if (error instanceof Error) {
+      //   console.error(error.message);
+      // }
+      throw error;
       return [];
     }
   }
@@ -279,8 +283,9 @@ export class AfadParser {
 
       return newEarthquakes;
     } catch (error) {
-      console.error(`Error saving to database:`, error);
-      throw new Error(`Error saving to database: ${error}`);
+      // console.error(`Error saving to database:`, error);
+      // throw new Error(`Error saving to database: ${error}`);
+      throw error;
     }
   }
 

@@ -1,7 +1,12 @@
 import sql from '$lib/db';
 import type { EarthquakeData } from './afad';
+import iconv from 'iconv-lite';
 
 const KOERI_URL = 'http://www.koeri.boun.edu.tr/scripts/lst1.asp';
+
+const minimumPollThresholds = await sql`SELECT MIN(threshold) as threshold FROM polls`;
+
+const minimumPollThreshold = minimumPollThresholds[0]?.threshold || 5;
 
 export class KoeriParser {
   async fetch_data(): Promise<string> {
@@ -19,16 +24,21 @@ export class KoeriParser {
     try {
       const response = await fetch(KOERI_URL, { headers });
 
-      console.log('Fetching from ', KOERI_URL);
+      console.log(`Fetching from ${KOERI_URL}`);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      return await response.text();
-    } catch (e) {
-      throw new Error(
-        `Failed to fetch data from ${KOERI_URL}: ${e instanceof Error ? e.message : String(e)}`
-      );
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      const text = iconv.decode(buffer, 'windows-1254');
+      return text;
+    } catch (error) {
+      if (error instanceof Error) {
+        console.error(`Failed to fetch data from KOERI: ${error.message}`);
+        throw error;
+      }
+      throw new Error(`Failed to fetch data from KOERI: Unknown error`);
     }
   }
 
@@ -56,45 +66,63 @@ export class KoeriParser {
       if (!trimmed || trimmed.includes('------') || trimmed.includes('Tarih')) continue;
 
       try {
-        // Primary regex pattern
-        const pattern =
-          /(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(.*?)\s{2,}(\S.*?)$/;
-        let match = trimmed.match(pattern);
+        // const pattern =
+        //   /(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(.*?)\s{2,}(\S.*?)$/;
 
-        let year, month, day, time_str, lat, lon, depth, md, ml, mw, location, quality;
+        // const pattern =
+        //   /^(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(.+?)\s+(İlksel|REVIZE\d*|REVİZE\d*)\s*$/;
 
-        if (match) {
-          [, year, month, day, time_str, lat, lon, depth, md, ml, mw, location, quality] = match;
-        } else {
-          // Fallback pattern
-          const pattern2 =
-            /(\d{4})\.(\d{2})\.(\d{2})\s+(\d{2}:\d{2}:\d{2})\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(-\.-|\d+\.\d+)\s+(.*?)$/;
-          match = trimmed.match(pattern2);
-          if (!match) continue;
+        // Tarih      Saat      Enlem(N)  Boylam(E) Derinlik(km)  MD   ML   Mw    Yer                                             Çözüm Niteliği
+        // ---------- --------  --------  -------   ----------    ------------    --------------                                  --------------
+        // 2025.10.07 03:39:28  39.1717   28.1613       11.6      -.-  2.3  -.-   SINANDEDE-SINDIRGI (BALIKESIR)                    İlksel // this is the "trimmed"
+        let trimmedArray = trimmed.split(/\s{2,}/);
 
-          [, year, month, day, time_str, lat, lon, depth, md, ml, mw, location] = match;
-          // Try to split location and quality
-          const parts = location.trim().split(/\s+/);
-          if (parts.length >= 2 && ['İlksel', 'REVIZE'].includes(parts[parts.length - 1])) {
-            quality = parts.pop()!;
-            location = parts.join(' ');
-          } else {
-            quality = 'İlksel';
-          }
+        // Ensure we have at least 9 parts
+        // Sometimes a row might be malformed because of loading issues.
+        if (trimmedArray.length < 9) {
+          continue;
         }
 
-        // Fix Turkish characters (common encoding issue)
-        const fixTurkish = (s: string) =>
-          s
-            .replace(/Ý/g, 'İ')
-            .replace(/Ð/g, 'Ğ')
-            .replace(/Þ/g, 'Ş')
-            .replace(/ý/g, 'ı')
-            .replace(/ð/g, 'ğ')
-            .replace(/þ/g, 'ş');
+        // let match = trimmed.match(pattern);
+        // 2025.10.07 03:06:46
+        let dateParts = trimmedArray[0].split(' ');
 
-        location = fixTurkish(location.trim());
-        quality = fixTurkish(quality.trim());
+        // 2025.10.07
+        let additionalDateParts = dateParts[0].split('.');
+        let year = additionalDateParts[0];
+        let month = additionalDateParts[1];
+        let day = additionalDateParts[2];
+
+        // 03:06:46
+        let time_str = dateParts[1];
+
+        // 39.1717
+        let lat = trimmedArray[1];
+
+        // 28.1613
+        let lon = trimmedArray[2];
+
+        // 11.6
+        let depth = trimmedArray[3];
+
+        // -.-  2.3  -.-
+        let md = trimmedArray[4] !== '-.-' ? trimmedArray[4] : null;
+        let ml = trimmedArray[5] !== '-.-' ? trimmedArray[5] : null;
+        let mw = trimmedArray[6] !== '-.-' ? trimmedArray[6] : null;
+
+        let location = '';
+
+        if (trimmedArray[7].includes('(')) {
+          if (trimmedArray[7].includes(')')) {
+            location = trimmedArray[7];
+          } else {
+            continue;
+          }
+        } else {
+          location = trimmedArray[7];
+        }
+
+        let quality = trimmedArray[8];
 
         const isoDate = `${year}-${month}-${day}`;
         const timestamp = `${isoDate}T${time_str}Z`;
@@ -103,12 +131,23 @@ export class KoeriParser {
         const lonVal = parseFloat(lon);
         const depthVal = parseFloat(depth);
 
-        const mdVal = md === '-.-' ? null : parseFloat(md);
-        const mlVal = ml === '-.-' ? null : parseFloat(ml);
-        const mwVal = mw === '-.-' ? null : parseFloat(mw);
+        const mdVal = md ? parseFloat(md) : null;
+        const mlVal = ml ? parseFloat(ml) : null;
+        const mwVal = mw ? parseFloat(mw) : null;
 
         const magnitudes = [mdVal, mlVal, mwVal].filter((m): m is number => m !== null);
-        const maxMagnitude = magnitudes.length > 0 ? Math.max(...magnitudes) : null;
+
+        if (magnitudes.length === 0) {
+          console.log('No valid magnitude found, skipping line:', line);
+          continue;
+        }
+
+        const maxMagnitude = Math.max(...magnitudes);
+
+        // skip if below minimum threshold
+        if (maxMagnitude < minimumPollThreshold) {
+          continue;
+        }
 
         earthquakes.push({
           timestamp,
@@ -138,17 +177,8 @@ export class KoeriParser {
     try {
       const raw = await this.fetch_data();
       return this.parse_data(raw);
-    } catch (e) {
-      console.error('Error fetching/parsing earthquake data:', e);
-      // Optionally save debug file (Node.js only)
-      if (typeof window === 'undefined') {
-        try {
-          const fs = await import('fs').then((m) => m.promises);
-          await fs.writeFile('debug_response.html', raw, 'utf-8');
-          console.log('Saved raw response to debug_response.html');
-        } catch {}
-      }
-      return [];
+    } catch (error) {
+      throw error;
     }
   }
 
@@ -162,6 +192,11 @@ export class KoeriParser {
       const newEarthquakes: EarthquakeData[] = [];
 
       for (const eq of earthquakesToSave) {
+        if (eq.magnitude < minimumPollThreshold) {
+          console.log(`${eq.magnitude} is smaller than threshold ${minimumPollThreshold} skipping`);
+          continue;
+        }
+
         try {
           // Parse timestamp to extract date parts
           const timestamp = new Date(eq.timestamp);
@@ -225,10 +260,7 @@ export class KoeriParser {
 
       return newEarthquakes;
     } catch (error) {
-      console.error('Error saving KOERI earthquakes to database:', error);
-      throw new Error(
-        `Failed to save earthquakes: ${error instanceof Error ? error.message : String(error)}`
-      );
+      throw error;
     }
   }
 

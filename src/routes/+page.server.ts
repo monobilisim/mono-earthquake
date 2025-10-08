@@ -101,8 +101,23 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
 			md, ml, mw, magnitude, location, timestamp, date,
 			time, quality, year, month, day, week FROM earthquakes ORDER BY id DESC LIMIT 1000;`;
   }
+
   if (earthquakesResult.length > 0) {
-    earthquakes = earthquakesResult;
+    let earthquakesWithFeedbacks: Earthquake[] = [];
+
+    // @ts-ignore it is Promise<Earthquake[] | undefined>[]
+    earthquakesWithFeedbacks = earthquakesResult.map(async (eq) => {
+      const feedbacks = await sql`SELECT id FROM wa_messages WHERE earthquake_id = ${eq.id}`;
+
+      if (feedbacks.length > 0) {
+        return eq;
+      }
+
+      return undefined;
+    });
+
+    // first convert Promise<Earthquake[] | undefined> to Earthquake[] | undefined then filter out undefined
+    earthquakes = (await Promise.all(earthquakesWithFeedbacks)).filter((i) => i !== undefined);
   }
 
   try {
