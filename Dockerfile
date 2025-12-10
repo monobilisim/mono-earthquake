@@ -1,4 +1,4 @@
-FROM oven/bun:1.2.22-slim
+FROM oven/bun:1.3.4-slim
 
 WORKDIR /mono-earthquake
 

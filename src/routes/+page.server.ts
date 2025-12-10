@@ -1,4 +1,5 @@
 import { error, fail } from '@sveltejs/kit';
+import type { Poll } from '$lib/types';
 import type { Actions, PageServerLoad } from './$types';
 import sql, { getUser } from '$lib/db';
 import { generateRandomToken } from '$lib/utils';
@@ -71,6 +72,10 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
       days: []
     }
   };
+
+  const polls: Poll[] = await sql`SELECT id, name, type, threshold FROM polls`;
+  const earthquakePoll = <Poll>polls.find((poll) => poll.name === 'deprem');
+  const earthquakeThreshold = earthquakePoll.threshold;
 
   let earthquakeFilters: EarthquakeFilters = {
     min_magnitude: url.searchParams.get('min_magnitude') as never,
@@ -169,7 +174,9 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
           const formattedDay = day.toString().padStart(2, '0');
 
           const countByDate =
-            await sql`SELECT COUNT(*) as count FROM earthquakes WHERE year = ${year} AND month = ${month} AND day = ${day}`;
+            await sql`SELECT COUNT(*) as count FROM earthquakes WHERE year = ${year} AND month = ${month} AND day = ${day} AND magnitude >= ${earthquakeThreshold}`;
+
+          console.log(`${year}-${formattedMonth}-${formattedDay}: ${countByDate[0].count}`);
 
           if (countByDate.length > 0) {
             daysValueArray.push({

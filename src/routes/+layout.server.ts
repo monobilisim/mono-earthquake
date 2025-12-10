@@ -1,11 +1,7 @@
-import sql, { getUser, type User } from '$lib/db';
+import { getUser, type User } from '$lib/db';
 import type { LayoutServerLoad } from './$types';
 
 export const load: LayoutServerLoad = async ({ cookies }) => {
-  type SessionActive = {
-    sessionActive: boolean;
-  };
-
   let sessionActive: boolean = false;
   let user: User | null = null;
 

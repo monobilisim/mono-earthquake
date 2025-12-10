@@ -5,5 +5,10 @@ yarn.lock
 bun.lock
 bun.lockb
 
+.svelte-kit/
+build/
+old/
+
 # Miscellaneous
 /static/
+node_modules/

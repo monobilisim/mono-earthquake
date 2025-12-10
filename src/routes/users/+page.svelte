@@ -14,8 +14,11 @@
   import { page } from '$app/state';
 
   let { data } = $props();
+  // svelte-ignore state_referenced_locally
   let users = $state(data?.users ?? []);
+  // svelte-ignore state_referenced_locally
   const groups = data?.groups ?? [];
+  // svelte-ignore state_referenced_locally
   const userGroups = $state(data?.userGroups ?? []);
 
   let newUser: boolean = $state(false);
@@ -81,7 +84,7 @@
     active: '',
     user_group: ''
   });
-
+  // svelte-ignore state_referenced_locally
   const originalUsers = data.users ?? [];
 
   const urlParams = new URLSearchParams(page.url.search);
@@ -355,8 +358,8 @@
             <Table.Head class="w-32">Phone Number</Table.Head>
             <Table.Head class="w-64">Roles</Table.Head>
             <Table.Head class="w-64">Tenant</Table.Head>
-            <Table.Head class="w-128">Status</Table.Head>
-            <Table.Head class="w-128"></Table.Head>
+            <Table.Head class="w-lg">Status</Table.Head>
+            <Table.Head class="w-lg"></Table.Head>
             <Table.Head></Table.Head>
           </Table.Row>
         </Table.Header>
@@ -822,10 +825,12 @@
                     name="userGroup"
                   >
                     <Select.Trigger>
-                      {usersEditData[user.id].user_group ??
-                        (usersEditData[user.id].user_group === ''
-                          ? 'Select a group'
-                          : 'Select a tenant')}
+                      {usersEditData[user.id].user_group != ''
+                        ? usersEditData[user.id].user_group
+                        : ('Select a group' ??
+                          (usersEditData[user.id].user_group == ''
+                            ? 'Select a group'
+                            : 'Select a tenant'))}
                     </Select.Trigger>
                     <Select.Content>
                       {#each userGroups

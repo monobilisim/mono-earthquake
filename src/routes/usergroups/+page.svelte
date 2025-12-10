@@ -15,8 +15,11 @@
 
   let { data } = $props();
 
+  // svelte-ignore state_referenced_locally
   let groups: UserGroup[] = $state(data?.userGroups ?? []);
+  // svelte-ignore state_referenced_locally
   const originalGroups = $state(data?.userGroups ?? []);
+  // svelte-ignore state_referenced_locally
   let tenants = data?.tenants ?? [];
 
   let newGroup: boolean = $state(false);
@@ -172,8 +175,8 @@
         <Table.Header>
           <Table.Row>
             <Table.Head class="w-32">ID</Table.Head>
-            <Table.Head class="w-128">Name</Table.Head>
-            <Table.Head class="w-128">Tenant</Table.Head>
+            <Table.Head class="w-lg">Name</Table.Head>
+            <Table.Head class="w-lg">Tenant</Table.Head>
             <Table.Head></Table.Head>
           </Table.Row>
         </Table.Header>
@@ -191,7 +194,7 @@
                   </Select.Trigger>
                   <Select.Content>
                     {#each tenants as tenant (tenant)}
-                      <Select.Item value={tenant} label={tenant} />
+                      <Select.Item value={tenant.toString()} label={tenant.toString()} />
                     {/each}
                   </Select.Content>
                 </Select.Root>

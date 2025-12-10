@@ -1,6 +1,7 @@
 import sql from '$lib/db';
 
 export interface EarthquakeData {
+  id?: string;
   timestamp: string;
   date: string;
   time: string;
@@ -82,7 +83,9 @@ export class AfadParser {
         format: 'json',
         orderby: 'timedesc',
         limit: (options.limit || 500).toString(),
-        minmag: (minimumPollThreshold - 0.1).toString()
+        // afad fixed it now
+        //minmag: (minimumPollThreshold - 0.1).toString()
+        minmag: minimumPollThreshold.toString()
       });
 
       if (options.minMagnitude !== undefined) {

@@ -13,7 +13,9 @@
 
   let { data } = $props();
 
+  // svelte-ignore state_referenced_locally
   let groups = $state(data?.groups ?? []);
+  // svelte-ignore state_referenced_locally
   const originalGroups = $state(data?.groups ?? []);
 
   let newGroup: boolean = $state(false);
@@ -201,7 +203,7 @@
             <Table.Head class="w-16">ID</Table.Head>
             <Table.Head class="w-64">Name</Table.Head>
             <Table.Head class="w-64">Polls</Table.Head>
-            <Table.Head class="w-128">Status</Table.Head>
+            <Table.Head class="w-lg">Status</Table.Head>
           </Table.Row>
         </Table.Header>
         <Table.Body>
@@ -325,10 +327,9 @@
                     </Dialog.Trigger>
                     <Dialog.Content class="h-64 w-64">
                       <Dialog.Title>Are you sure?</Dialog.Title>
-                      <Dialog.Description
-                        >The Tenant ({groups.find((g: Record<string, string>) => g.id === group.id)
-                          .name}) will be deleted.</Dialog.Description
-                      >
+                      <Dialog.Description>
+                        The Tenant ({groups.find((g) => g.id === group.id)?.name}) will be deleted.
+                      </Dialog.Description>
                       <div class="flex flex-col text-center">
                         <form
                           action="?/deleteGroup"
@@ -336,7 +337,9 @@
                           use:enhance={() => {
                             return async ({ result }) => {
                               if (result.type === 'failure') {
-                                toast.error(result.data);
+                                toast.error(
+                                  String(result.data || 'Error while deleting the tenant')
+                                );
                               }
 
                               if (result.type === 'success') {

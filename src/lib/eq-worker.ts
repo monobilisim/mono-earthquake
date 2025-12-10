@@ -1,13 +1,7 @@
 import { AfadParser, type EarthquakeData } from './afad';
 import { KoeriParser } from './koeri';
 import sql from '$lib/db';
-
-type Poll = {
-  id: number;
-  name: string;
-  type: string;
-  threshold: number;
-};
+import type { Poll } from '$lib/types';
 
 if (Bun.env.BUILD_STEP) {
   process.exit(0);
@@ -16,7 +10,7 @@ if (Bun.env.BUILD_STEP) {
 const PHONE_NUMBER_ID = Bun.env.PHONE_NUMBER_ID;
 const WHATSAPP_TOKEN = Bun.env.WHATSAPP_TOKEN;
 const EARTHQUAKE_SOURCE_PRIORITY = Bun.env.EARTHQUAKE_SOURCE_PRIORITY || 'afad';
-const HOW_MANY_MINUTES_BETWEEN_MESSAGES = Bun.env.HOW_MANY_MINUTES_BETWEEN_MESSAGES || 30;
+const HOW_MANY_MINUTES_BETWEEN_MESSAGES = Number(Bun.env.HOW_MANY_MINUTES_BETWEEN_MESSAGES) || 30;
 
 try {
   const polls: Poll[] = await sql`SELECT id, name, type, threshold FROM polls`;
@@ -231,7 +225,7 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
                   await sql`INSERT INTO wa_messages
 								 (id, user_id, is_read, message, poll_name, earthquake_id, updated_at, created_at)
                   VALUES
-                  (${messageId}, ${user.id}, 0, NULL, 'deprem', ${record.id}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`;
+                  (${messageId}, ${user.id}, 0, NULL, 'deprem', ${record.id}, datetime('now', '+3 hours'), CURRENT_TIMESTAMP)`;
                 } catch (error) {
                   console.error(error);
                   await sql`INSERT INTO wa_messages_failed

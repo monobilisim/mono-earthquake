@@ -5,14 +5,13 @@
   import * as Card from '$lib/components/ui/card/index.js';
   import * as Table from '$lib/components/ui/table/index.js';
   import * as Dialog from '$lib/components/ui/dialog/index.js';
-  import { cubicInOut } from 'svelte/easing';
   import * as Devalue from 'devalue';
   import { goto } from '$app/navigation';
   import { enhance } from '$app/forms';
   import { page } from '$app/state';
   import { toast } from 'svelte-sonner';
   import { onMount } from 'svelte';
-  import Chart, { type ChartItem } from 'chart.js/auto';
+  import Chart from 'chart.js/auto';
 
   const { data } = $props();
 
@@ -22,14 +21,14 @@
   let phone_number: string = $state('');
   let activation_token: string = $state('');
 
+  // svelte-ignore state_referenced_locally
   const user = data?.user;
+  // svelte-ignore state_referenced_locally
   const earthquakes = data?.earthquakes;
+  // svelte-ignore state_referenced_locally
   const last30DaysFeedbackStats = data?.last30DaysStats.messages;
+  // svelte-ignore state_referenced_locally
   const last30DaysEarthquakeStats = data?.last30DaysStats.earthquakes;
-
-  let sendTokenError: string = $state('');
-
-  let verifyTokenError: string = $state('');
 
   let selectedEarthquake: number = $state(0);
 
@@ -327,7 +326,7 @@
               </div>
             </div>
 
-            <div class="h-48 w-80 md:h-64 md:w-128">
+            <div class="h-48 w-80 md:h-64 md:w-lg">
               <div class="bold flex h-full w-full flex-col items-center justify-center">
                 <canvas bind:this={canvas2El} class="h-full w-full"></canvas>
               </div>
@@ -354,8 +353,8 @@
                   <Table.Cell class="w-16">ID</Table.Cell>
                   <Table.Cell class="w-64">Name</Table.Cell>
                   <Table.Cell class="w-64">Phone Number</Table.Cell>
-                  <Table.Cell class="w-128">Status</Table.Cell>
-                  <Table.Cell class="w-128">Message</Table.Cell>
+                  <Table.Cell class="w-lg">Status</Table.Cell>
+                  <Table.Cell class="w-lg">Message</Table.Cell>
                   <Table.Cell>Updated At</Table.Cell>
                 </Table.Row>
               </Table.Header>
