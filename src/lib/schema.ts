@@ -80,7 +80,7 @@ try {
   await sql`
 	CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name VARCHAR(255) NOT NULL UNIQUE,
+    name VARCHAR(255) NOT NULL,
     phone_number VARCHAR(20) DEFAULT NULL,
     groups TEXT DEFAULT NULL,
     user_group TEXT DEFAULT NULL,
