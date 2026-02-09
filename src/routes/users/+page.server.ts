@@ -104,9 +104,20 @@ export const actions: Actions = {
     }
 
     try {
+      const existingUser = await sql`SELECT id, name, groups FROM users WHERE phone_number = ${phone_number}`;
+      if (existingUser.length > 0) {
+        if (existingUser[0].groups?.includes(groups)) {
+          return fail(400, 'A user with this phone number already exists in the selected group');
+        }
+      }
+    } catch (e) {
+      return fail(500, 'Error checking existing users');
+    }
+
+    try {
       await sql`INSERT INTO users (name, phone_number, groups, roles, user_group) VALUES (${name},${phone_number},${groups},${roles},${userGroup})`;
       return { success: true, message: 'User added successfully' };
-    } catch {
+    } catch (e) {
       return fail(500, 'Error adding user');
     }
   },
