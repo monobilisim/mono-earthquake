@@ -434,7 +434,7 @@
 
             <div class="mt-4 flex justify-between">
               <Button type="submit">Send code</Button>
-              <Button onclick={() => (whatsappMessageSent = true)}>I have code</Button>
+              <Button onclick={() => (whatsappMessageSent = true)}>I have a code</Button>
             </div>
           </form>
         {:else}
