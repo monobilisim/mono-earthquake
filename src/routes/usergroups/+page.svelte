@@ -211,13 +211,13 @@
               <Table.Cell class="flex justify-end gap-2">
                 <Dialog.Root>
                   <Dialog.Trigger>
-                    <Button variant="ghost" class="p-0! text-red-500">Delete Tenant</Button>
+                    <Button variant="ghost" class="p-0! text-red-500">Delete Group</Button>
                   </Dialog.Trigger>
                   <Dialog.Content class="h-64 w-64">
                     <Dialog.Title>Are you sure?</Dialog.Title>
                     <Dialog.Description>
-                      The Tenant ({groups.find((g: UserGroup) => g.id === group.id)?.name ??
-                        'name'}) will be deleted.
+                      The Group ({groups.find((g: UserGroup) => g.id === group.id)?.name ?? 'name'})
+                      will be deleted.
                     </Dialog.Description>
                     <div class="flex flex-col text-center">
                       <form
