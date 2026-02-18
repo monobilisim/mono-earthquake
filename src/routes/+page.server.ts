@@ -176,7 +176,7 @@ export const load: PageServerLoad = async ({ cookies, url }) => {
           const countByDate =
             await sql`SELECT COUNT(*) as count FROM earthquakes WHERE year = ${year} AND month = ${month} AND day = ${day} AND magnitude >= ${earthquakeThreshold}`;
 
-          console.log(`${year}-${formattedMonth}-${formattedDay}: ${countByDate[0].count}`);
+          // console.log(`${year}-${formattedMonth}-${formattedDay}: ${countByDate[0].count}`);
 
           if (countByDate.length > 0) {
             daysValueArray.push({
