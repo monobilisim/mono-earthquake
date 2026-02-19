@@ -1,5 +1,5 @@
 import type { PageServerLoad, Actions } from './$types';
-import sql, { getUser } from '$lib/db';
+import sql, { getUser, getAllGroups } from '$lib/db';
 import { redirect, fail } from '@sveltejs/kit';
 import { stripNonAlnumAscii } from '$lib/utils';
 
@@ -21,27 +21,51 @@ export const load: PageServerLoad = async ({ cookies }) => {
 
   const user = await getUser(session);
 
-  if (!user || !user.roles.includes('admin')) {
+  if (!user) {
     throw redirect(303, '/');
   }
 
-  try {
-    const userGroupsResult = await sql`SELECT id, name, tenant FROM user_groups`;
+  const allgroups = await getAllGroups("groups");
 
-    const tenantsResult = await sql`SELECT name FROM groups`;
+  if (!user.roles.includes('admin') && user.roles.some(role => allgroups.some(group => group === role))) {
+    try {
+      const userGroupsResult = await sql`SELECT id, name, tenant FROM user_groups WHERE tenant IN (${user.roles.join(',')})`;
 
-    tenants = tenantsResult.map((row: Record<string, string>) => row.name);
+      const tenantsResult = await sql`SELECT name FROM groups`;
 
-    userGroups = userGroupsResult.map((row: Record<string, string>) => ({
-      id: row.id,
-      name: row.name,
-      tenant: row.tenant
-    }));
-  } catch (e) {
-    console.error(e);
+      tenants = tenantsResult.map((row: Record<string, string>) => row.name);
+
+      userGroups = userGroupsResult.map((row: Record<string, string>) => ({
+        id: row.id,
+        name: row.name,
+        tenant: row.tenant
+      }));
+    } catch (e) {
+      console.error(e);
+    }
+
+    return { userGroups, tenants };
   }
 
-  return { userGroups, tenants };
+  if (user.roles.includes('admin')) {
+    try {
+      const userGroupsResult = await sql`SELECT id, name, tenant FROM user_groups`;
+
+      const tenantsResult = await sql`SELECT name FROM groups`;
+
+      tenants = tenantsResult.map((row: Record<string, string>) => row.name);
+
+      userGroups = userGroupsResult.map((row: Record<string, string>) => ({
+        id: row.id,
+        name: row.name,
+        tenant: row.tenant
+      }));
+    } catch (e) {
+      console.error(e);
+    }
+
+    return { userGroups, tenants };
+  }
 };
 
 export const actions: Actions = {
@@ -54,28 +78,58 @@ export const actions: Actions = {
 
     const user = await getUser(session);
 
-    if (!user || !user.roles.includes('admin')) {
+    if (!user) {
       return fail(401, 'Unauthorized');
     }
 
-    const formData = await request.formData();
-    const name = formData.get('name')?.toString().trim();
-    const tenant = formData.get('tenant')?.toString().trim();
+    const allgroups = await getAllGroups("groups");
 
-    if (!name) {
-      return fail(400, 'Group name is required');
+    if (!user.roles.includes('admin') && user.roles.some(role => allgroups.some(group => group === role))) {
+      const formData = await request.formData();
+      const name = formData.get('name')?.toString().trim();
+      const tenant = user.roles[0];
+
+      if (!name) {
+        return fail(400, 'Group name is required');
+      }
+
+      if (!tenant) {
+        return fail(400, 'Tenant name is required');
+      }
+
+      try {
+        if (!allgroups.some(group => group === tenant)) {
+          return fail(400, 'Invalid tenant');
+        }
+
+        await sql`INSERT INTO user_groups (name, tenant) VALUES (${name}, ${tenant})`;
+        return { success: true, message: 'UserGroup added successfully' };
+      } catch (e) {
+        console.error(e);
+        return fail(500, 'Database error');
+      }
     }
 
-    if (!tenant) {
-      return fail(400, 'Tenant name is required');
-    }
+    if (user.roles.includes('admin')) {
+      const formData = await request.formData();
+      const name = formData.get('name')?.toString().trim();
+      const tenant = formData.get('tenant')?.toString().trim();
 
-    try {
-      await sql`INSERT INTO user_groups (name, tenant) VALUES (${name}, ${tenant})`;
-      return { success: true, message: 'UserGroup added successfully' };
-    } catch (e) {
-      console.error(e);
-      return fail(500, 'Database error');
+      if (!name) {
+        return fail(400, 'Group name is required');
+      }
+
+      if (!tenant) {
+        return fail(400, 'Tenant name is required');
+      }
+
+      try {
+        await sql`INSERT INTO user_groups (name, tenant) VALUES (${name}, ${tenant})`;
+        return { success: true, message: 'UserGroup added successfully' };
+      } catch (e) {
+        console.error(e);
+        return fail(500, 'Database error');
+      }
     }
   },
   deleteGroup: async ({ cookies, request }) => {
@@ -87,23 +141,49 @@ export const actions: Actions = {
 
     const user = await getUser(session);
 
-    if (!user || !user.roles.includes('admin')) {
+    if (!user) {
       return fail(401, 'Unauthorized');
     }
 
-    const formData = await request.formData();
-    const id = stripNonAlnumAscii(formData.get('id')?.toString().trim() || '');
+    const allgroups = await getAllGroups("groups");
 
-    if (!id) {
-      return fail(400, 'Group ID is required');
+    if (!user.roles.includes('admin') && user.roles.some(role => allgroups.some(group => group === role))) {
+      const formData = await request.formData();
+      const id = stripNonAlnumAscii(formData.get('id')?.toString().trim() || '');
+
+      if (!id) {
+        return fail(400, 'Group ID is required');
+      }
+
+      try {
+        const groupResult = await sql`SELECT tenant FROM user_groups WHERE id = ${id} AND tenant IN (${user.roles.join(',')})`;
+        if (groupResult.length === 0) {
+          return fail(403, 'Forbidden');
+        }
+
+        await sql`DELETE FROM user_groups WHERE id = ${id}`;
+        return { success: true, message: 'UserGroup deleted successfully' };
+      } catch (e) {
+        console.error(e);
+        return fail(500, 'Database error');
+      }
     }
 
-    try {
-      await sql`DELETE FROM user_groups WHERE id = ${id}`;
-      return { success: true, message: 'UserGroup deleted successfully' };
-    } catch (e) {
-      console.error(e);
-      return fail(500, 'Database error');
+    if (user.roles.includes('admin')) {
+      const formData = await request.formData();
+      const id = stripNonAlnumAscii(formData.get('id')?.toString().trim() || '');
+
+      if (!id) {
+        return fail(400, 'Group ID is required');
+      }
+
+      try {
+        await sql`DELETE FROM user_groups WHERE id = ${id}`;
+        return { success: true, message: 'UserGroup deleted successfully' };
+      } catch (e) {
+        console.error(e);
+        return fail(500, 'Database error');
+      }
     }
   }
 };

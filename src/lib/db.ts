@@ -56,3 +56,23 @@ export async function getUser(session: string): Promise<User> {
 
   return user;
 }
+
+export async function getAllGroups(mode: "all" | "groups"): Promise<string[]> {
+  try {
+    const allGroups = await sql`SELECT name FROM groups`;
+    let result: string[] = [];
+    if (mode === "groups") {
+      result = allGroups.map((group: { name: string }) => group.name);
+    }
+
+    if (mode === "all") {
+      const gs = allGroups.map((group: { name: string }) => group.name)
+      result = ["admin", ...gs, ...gs.map((g: { name: string }) => `${g.name}-masked`)];
+    }
+
+    return result;
+  } catch (error) {
+    console.error('Error fetching groups:', error);
+    return [];
+  }
+}

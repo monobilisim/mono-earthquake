@@ -11,6 +11,7 @@ const PHONE_NUMBER_ID = Bun.env.PHONE_NUMBER_ID;
 const WHATSAPP_TOKEN = Bun.env.WHATSAPP_TOKEN;
 const EARTHQUAKE_SOURCE_PRIORITY = Bun.env.EARTHQUAKE_SOURCE_PRIORITY || 'afad';
 const HOW_MANY_MINUTES_BETWEEN_MESSAGES = Number(Bun.env.HOW_MANY_MINUTES_BETWEEN_MESSAGES) || 30;
+const TEST = Bun.env.TEST === 'true';
 
 try {
   const polls: Poll[] = await sql`SELECT id, name, type, threshold FROM polls`;
@@ -176,44 +177,56 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
               console.log(`Sending whatsapp template to user ${user.name} with ID ${user.id}`);
 
               try {
-                const response = await fetch(
-                  `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`,
-                  {
-                    method: 'POST',
-                    headers: {
-                      'Content-Type': 'application/json',
-                      Authorization: `Bearer ${WHATSAPP_TOKEN}`
-                    },
-                    body: JSON.stringify({
-                      messaging_product: 'whatsapp',
-                      to: user.phone_number,
-                      type: 'template',
-                      template: {
-                        name: 'deprem',
-                        language: { code: 'tr' },
-                        components: [
-                          {
-                            type: 'body',
-                            parameters: [
-                              { type: 'text', parameter_name: 'adsoyad', text: user.name },
-                              {
-                                type: 'text',
-                                parameter_name: 'detay',
-                                text: `Biraz önce (${record.time}) ${record.location} merkezli, ${record.magnitude} büyüklüğünde (${earthqaukeSource})`
-                              }
-                            ]
-                          }
-                        ]
-                      }
-                    })
-                  }
-                );
+                let response: Response;
+                if (TEST) {
+                  response = await fetch("https://google.com");
+                } else {
+                  response = await fetch(
+                    `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`,
+                    {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${WHATSAPP_TOKEN}`
+                      },
+                      body: JSON.stringify({
+                        messaging_product: 'whatsapp',
+                        to: user.phone_number,
+                        type: 'template',
+                        template: {
+                          name: 'deprem',
+                          language: { code: 'tr' },
+                          components: [
+                            {
+                              type: 'body',
+                              parameters: [
+                                { type: 'text', parameter_name: 'adsoyad', text: user.name },
+                                {
+                                  type: 'text',
+                                  parameter_name: 'detay',
+                                  text: `Biraz önce (${record.time}) ${record.location} merkezli, ${record.magnitude} büyüklüğünde (${earthqaukeSource})`
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      })
+                    }
+                  );
+                }
 
                 if (!response.ok) {
-                  console.log(
-                    `Failed to send message to user ${user.name} with ID ${user.id}:`,
-                    await response.text()
-                  );
+                  const body = await response.text();
+                  console.log(`Failed to send message to user ${user.name} with ID ${user.id}:`);
+
+                  try {
+                    await sql`INSERT INTO wa_messages_failed
+								 (user_id, poll_name, earthquake_id, reason)
+                    VALUES
+                    (${user.id}, 'deprem', ${record.id}, ${body})`;
+                  } catch (error) {
+                    console.error('Failed to log failed message to database:', error);
+                  }
                   continue;
                 }
 
@@ -231,7 +244,7 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
                   await sql`INSERT INTO wa_messages_failed
 								 (user_id, poll_name, earthquake_id, reason)
                   VALUES
-                  (${user.id}, 'deprem', ${record.id}, 'Failed to parse response')`;
+                  (${user.id}, 'deprem', ${record.id}, ${error instanceof Error ? error.message : error ?? 'Unknown error'})`;
                 }
               } catch (error) {
                 console.error(

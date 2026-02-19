@@ -2,7 +2,6 @@
   import '../app.css';
   import favicon from '$lib/assets/favicon.svg';
   import { isPortrait } from '$lib/utils';
-
   import { Toaster } from '$lib/components/ui/sonner/index';
   import { ModeWatcher } from 'mode-watcher';
   let { children, data } = $props();
@@ -10,6 +9,9 @@
   const sessionActive = data?.sessionActive;
   // svelte-ignore state_referenced_locally
   const user = data?.user;
+  // svelte-ignore state_referenced_locally
+  const appState = data?.appState;
+  const tenants = appState?.tenants || [];
 
   import SunIcon from '@lucide/svelte/icons/sun';
   import MoonIcon from '@lucide/svelte/icons/moon';
@@ -69,6 +71,14 @@
       sidebarOpen = false;
     }
   });
+
+  let userIsAdminOnATenant: boolean = $state(false);
+  // masked users can't be admins
+  if (user && !user?.roles.includes('masked')) {
+    userIsAdminOnATenant = user?.roles.some((role: string) =>
+      tenants.some((tenant: string) => role === tenant)
+    );
+  }
 </script>
 
 <svelte:head>
@@ -96,7 +106,7 @@
         </Button>
 
         {#each sidebarData.navItems as item}
-          {#if item.role == 'admin' && !user?.roles.includes(item.role)}
+          {#if item.role == 'admin' && !userIsAdminOnATenant}
             <!-- Do not render admin routes if user is not admin -->
           {:else}
             <Sidebar.MenuItem class="*:decoration-none">
@@ -148,7 +158,7 @@
             <Sidebar.GroupContent>
               <Sidebar.Menu>
                 {#each sidebarData.navItems as item}
-                  {#if item.role == 'admin' && !user?.roles.includes(item.role)}
+                  {#if item.role == 'admin' && !userIsAdminOnATenant}
                     <!-- Do not render admin routes if user is not admin -->
                   {:else}
                     <Sidebar.MenuItem>

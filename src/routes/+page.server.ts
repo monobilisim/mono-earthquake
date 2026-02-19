@@ -6,6 +6,7 @@ import { generateRandomToken } from '$lib/utils';
 
 const PHONE_NUMBER_ID = Bun.env.PHONE_NUMBER_ID;
 const WHATSAPP_TOKEN = Bun.env.WHATSAPP_TOKEN;
+const TEST = Bun.env.TEST === 'true';
 
 type User = {
   name: string;
@@ -290,50 +291,56 @@ export const actions: Actions = {
       return fail(400, 'Phone number does not exists');
     }
 
-    const whatsappResponse = await fetch(
-      `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${WHATSAPP_TOKEN}`
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          to: phone_number,
-          type: 'template',
-          template: {
-            name: 'giris_kodu',
-            language: { code: 'tr' },
-            components: [
-              {
-                type: 'body',
-                parameters: [
-                  {
-                    type: 'text',
-                    text: activation_token
-                  }
-                ]
-              },
-              {
-                type: 'button',
-                sub_type: 'url',
-                index: '0',
-                parameters: [{ type: 'text', text: activation_token }]
-              }
-            ]
-          }
-        })
+    if (TEST) {
+      console.log(`Activation token for ${phone_number}: ${activation_token}`);
+      return { success: true };
+    } else {
+
+      const whatsappResponse = await fetch(
+        `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${WHATSAPP_TOKEN}`
+          },
+          body: JSON.stringify({
+            messaging_product: 'whatsapp',
+            to: phone_number,
+            type: 'template',
+            template: {
+              name: 'giris_kodu',
+              language: { code: 'tr' },
+              components: [
+                {
+                  type: 'body',
+                  parameters: [
+                    {
+                      type: 'text',
+                      text: activation_token
+                    }
+                  ]
+                },
+                {
+                  type: 'button',
+                  sub_type: 'url',
+                  index: '0',
+                  parameters: [{ type: 'text', text: activation_token }]
+                }
+              ]
+            }
+          })
+        }
+      );
+
+      if (!whatsappResponse.ok) {
+        console.log(await whatsappResponse.json());
+        await sql`UPDATE users SET activation_token = NULL WHERE phone_number = ${phone_number}`;
+        return fail(500, 'Could not send WhatsApp message');
       }
-    );
 
-    if (!whatsappResponse.ok) {
-      console.log(await whatsappResponse.json());
-      await sql`UPDATE users SET activation_token = NULL WHERE phone_number = ${phone_number}`;
-      return fail(500, 'Could not send WhatsApp message');
+      return { success: true };
     }
-
-    return { success: true };
   },
 
   verifyToken: async ({ cookies, request }) => {
