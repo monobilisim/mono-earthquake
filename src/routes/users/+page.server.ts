@@ -10,6 +10,7 @@ type AppUser = {
   user_group: string;
   roles: string[];
   active: boolean;
+  province: string;
 };
 
 export const load: PageServerLoad = async ({ cookies }) => {
@@ -31,7 +32,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
 
   if (user.roles.includes('admin')) {
     usersResult =
-      await sql`SELECT id, name, phone_number, groups, user_group, roles, active FROM users`;
+      await sql`SELECT id, name, phone_number, groups, user_group, roles, province, active FROM users`;
   }
 
   const allgroups = await getAllGroups("groups");
@@ -39,7 +40,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
   // Non admin tenant owners can see users in their own tenant
   if (!user.roles.includes('admin') && user.roles.some(role => allgroups.includes(role))) {
     usersResult =
-      await sql`SELECT id, name, phone_number, groups, user_group, roles, active FROM users WHERE groups LIKE ${'%' + user.groups[0] + '%'}`;
+      await sql`SELECT id, name, phone_number, groups, user_group, roles, province, active FROM users WHERE groups LIKE ${'%' + user.groups[0] + '%'}`;
   }
 
   if (usersResult.length === 0) {
@@ -53,7 +54,8 @@ export const load: PageServerLoad = async ({ cookies }) => {
     groups: row.groups ? row.groups.split(',') : [],
     user_group: row.user_group,
     roles: row.roles ? row.roles.split(',') : [],
-    active: row.active
+    active: row.active,
+    province: row.province || ""
   }));
 
   const groupResult = await sql`SELECT name FROM groups`;
@@ -108,6 +110,7 @@ export const actions: Actions = {
       const groups = user.groups[0]; // Non admin users can only add users to their own group
       const roles = `${user.groups[0]}-masked`;
       const userGroup = formData.get('userGroup') as string;
+      const province = formData.get('province') as string;
 
       if (!name || !phone_number) {
         return fail(400, 'Name and phone number are required');
@@ -129,7 +132,7 @@ export const actions: Actions = {
       }
 
       try {
-        await sql`INSERT INTO users (name, phone_number, groups, roles, user_group) VALUES (${name},${phone_number},${groups},${roles},${userGroup})`;
+        await sql`INSERT INTO users (name, phone_number, groups, roles, user_group, province) VALUES (${name},${phone_number},${groups},${roles},${userGroup},${province})`;
         return { success: true, message: 'User added successfully' };
       } catch (e) {
         return fail(500, 'Error adding user');
@@ -143,6 +146,7 @@ export const actions: Actions = {
       const groups = (formData.get('groups') as string).replace(/[^a-zA-Z0-9,]/g, '') || '';
       const roles = (formData.get('roles') as string).replace(/[^a-zA-Z0-9,-]/g, '') || '';
       const userGroup = formData.get('userGroup') as string;
+      const province = formData.get('province') as string;
 
       if (!name || !phone_number) {
         return fail(400, 'Name and phone number are required');
@@ -164,7 +168,7 @@ export const actions: Actions = {
       }
 
       try {
-        await sql`INSERT INTO users (name, phone_number, groups, roles, user_group) VALUES (${name},${phone_number},${groups},${roles},${userGroup})`;
+        await sql`INSERT INTO users (name, phone_number, groups, roles, user_group, province) VALUES (${name},${phone_number},${groups},${roles},${userGroup},${province})`;
         return { success: true, message: 'User added successfully' };
       } catch (e) {
         return fail(500, 'Error adding user');
@@ -247,6 +251,7 @@ export const actions: Actions = {
       const groups = user.groups[0];
       const roles = `${user.groups[0]}-masked`;
       const userGroup = formData.get('userGroup') as string;
+      const province = formData.get('province') as string;
 
       if (!id || !name || !phone_number) {
         return fail(400, 'User ID, name and phone number are required');
@@ -266,7 +271,7 @@ export const actions: Actions = {
           return fail(403, 'Forbidden');
         }
 
-        await sql`UPDATE users SET name = ${name}, phone_number = ${phone_number}, groups = ${groups}, roles = ${roles}, user_group = ${userGroup} WHERE id = ${id}`;
+        await sql`UPDATE users SET name = ${name}, phone_number = ${phone_number}, groups = ${groups}, roles = ${roles}, user_group = ${userGroup}, province = ${province} WHERE id = ${id}`;
         return { success: true, message: 'User updated successfully' };
       } catch (e) {
         console.error(e);
@@ -282,6 +287,7 @@ export const actions: Actions = {
       const groups = (formData.get('groups') as string).replace(/[^a-zA-Z0-9,]/g, '') || '';
       const roles = (formData.get('roles') as string).replace(/[^a-zA-Z0-9,-]/g, '') || '';
       const userGroup = formData.get('userGroup') as string;
+      const province = formData.get('province') as string;
 
       if (!id || !name || !phone_number) {
         return fail(400, 'User ID, name and phone number are required');
@@ -296,7 +302,7 @@ export const actions: Actions = {
       }
 
       try {
-        await sql`UPDATE users SET name = ${name}, phone_number = ${phone_number}, groups = ${groups}, roles = ${roles}, user_group = ${userGroup} WHERE id = ${id}`;
+        await sql`UPDATE users SET name = ${name}, phone_number = ${phone_number}, groups = ${groups}, roles = ${roles}, user_group = ${userGroup}, province = ${province} WHERE id = ${id}`;
         return { success: true, message: 'User updated successfully' };
       } catch (e) {
         console.error(e);

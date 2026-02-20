@@ -13,6 +13,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
 
+  import { Provinces } from '$lib/utils.js';
+
   let { data } = $props();
   // svelte-ignore state_referenced_locally
   let users = $state(data?.users ?? []);
@@ -26,6 +28,7 @@
   let newUserPhoneNumber: string = $state('');
   let newUserRoles: string = $state('');
   let newUserGroups: string = $state('');
+  let newUserProvince: string = $state('');
 
   async function newUserAdd() {
     const formData = new FormData();
@@ -37,6 +40,7 @@
     formData.append('roles', newUserRoles);
     formData.append('groups', newUserGroups);
     formData.append('userGroup', newUserUserGroup);
+    formData.append('province', newUserProvince);
 
     const response = await fetch(`/users?/addUser`, {
       method: 'POST',
@@ -82,7 +86,8 @@
     roles: '',
     groups: '',
     active: '',
-    user_group: ''
+    user_group: '',
+    province: ''
   });
   // svelte-ignore state_referenced_locally
   const originalUsers = data.users ?? [];
@@ -97,7 +102,8 @@
     urlParams.get('roles') !== '' ||
     urlParams.get('groups') !== '' ||
     urlParams.get('active') !== '' ||
-    urlParams.get('user_group') !== ''
+    urlParams.get('user_group') !== '' ||
+    urlParams.get('province') !== ''
   ) {
     filters = {
       name: urlParams.get('name') ?? '',
@@ -105,7 +111,8 @@
       roles: urlParams.get('roles') ?? '',
       groups: urlParams.get('groups') ?? '',
       active: urlParams.get('active') ?? '',
-      user_group: urlParams.get('user_group') ?? ''
+      user_group: urlParams.get('user_group') ?? '',
+      province: urlParams.get('province') ?? ''
     };
 
     applyFilters();
@@ -137,6 +144,10 @@
         return false;
       }
 
+      if (filters.province !== '' && !(user.province === filters.province)) {
+        return false;
+      }
+
       return true;
     });
 
@@ -150,7 +161,8 @@
       roles: '',
       groups: '',
       active: '',
-      user_group: ''
+      user_group: '',
+      province: ''
     };
 
     const url = new URL(page.url);
@@ -173,6 +185,7 @@
     user_group: string;
     roles: string[];
     active: boolean;
+    province: string;
   };
 
   interface EditableAppUser extends AppUser {
@@ -358,6 +371,7 @@
             <Table.Head class="w-32">Phone Number</Table.Head>
             <Table.Head class="w-64">Roles</Table.Head>
             <Table.Head class="w-64">Tenant</Table.Head>
+            <Table.Head class="w-64">Province</Table.Head>
             <Table.Head class="w-lg">Status</Table.Head>
             <Table.Head class="w-lg"></Table.Head>
             <Table.Head></Table.Head>
@@ -502,6 +516,18 @@
                 {/if}
               </Table.Cell>
               <Table.Cell>
+                <Select.Root type="single" bind:value={newUserProvince} name="province">
+                  <Select.Trigger>
+                    {newUserProvince != '' ? newUserProvince : 'Select a province'}
+                  </Select.Trigger>
+                  <Select.Content>
+                    {#each Provinces as province}
+                      <Select.Item value={province} label={province} />
+                    {/each}
+                  </Select.Content>
+                </Select.Root>
+              </Table.Cell>
+              <Table.Cell>
                 <Select.Root type="single" bind:value={newUserUserGroup} name="userGroup">
                   <Select.Trigger>
                     {newUserGroups
@@ -535,6 +561,7 @@
                 <Table.Cell>{user.phone_number}</Table.Cell>
                 <Table.Cell>{user.roles}</Table.Cell>
                 <Table.Cell>{user.groups}</Table.Cell>
+                <Table.Cell>{user.province}</Table.Cell>
                 <Table.Cell
                   ><div class="flex items-center justify-between">
                     <div class={'mr-8 flex ' + (user.active ? 'gap-4' : 'gap-2')}>
@@ -649,6 +676,7 @@
                 />
                 <Input type="hidden" name="groups" value={usersEditData[user.id].tenantMulti[0]} />
                 <Input type="hidden" name="userGroup" value={usersEditData[user.id].user_group} />
+                <Input type="hidden" name="province" value={usersEditData[user.id].province} />
               </form>
 
               <Table.Row>
@@ -817,6 +845,24 @@
                       }}
                     />
                   {/if}
+                </Table.Cell>
+                <Table.Cell>
+                  <Select.Root
+                    type="single"
+                    bind:value={usersEditData[user.id].province}
+                    name="province"
+                  >
+                    <Select.Trigger>
+                      {usersEditData[user.id].province != ''
+                        ? usersEditData[user.id].province
+                        : 'Select a province'}
+                    </Select.Trigger>
+                    <Select.Content>
+                      {#each Provinces as province}
+                        <Select.Item value={province} label={province} />
+                      {/each}
+                    </Select.Content>
+                  </Select.Root>
                 </Table.Cell>
                 <Table.Cell>
                   <Select.Root
