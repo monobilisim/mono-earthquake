@@ -81,4 +81,4 @@ function toRadians(degrees: number) {
   return degrees * (Math.PI / 180);
 }
 
-console.log(getAffectedProvinces(5, 35.6342005, 31.157176));
+// console.log(getAffectedProvinces(5, 35.6342005, 31.157176));

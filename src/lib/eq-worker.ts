@@ -1,5 +1,6 @@
 import { AfadParser, type EarthquakeData } from './afad';
 import { KoeriParser } from './koeri';
+import { getAffectedProvinces } from './eq-utils';
 import sql from '$lib/db';
 import type { Poll } from '$lib/types';
 
@@ -148,6 +149,18 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
           `New earthquake record above threshold: ${record.magnitude} at ${record.location}`
         );
 
+        let affectedProvinces: string[];
+
+        if (TEST) {
+          // @ts-ignore
+          affectedProvinces = getAffectedProvinces(record.magnitude + 5, record.latitude, record.longitude)
+        } else {
+          // @ts-ignore
+          affectedProvinces = getAffectedProvinces(record.magnitude, record.latitude, record.longitude)
+        }
+
+        console.log(`Affected provinces: ${affectedProvinces}`);
+
         const activeGroups =
           await sql`SELECT name FROM groups WHERE active = 1 AND polls LIKE '%deprem%'`;
 
@@ -158,7 +171,7 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
 
           const groupName = group.name;
           const groupUsers =
-            await sql`SELECT id, name, phone_number, active FROM users WHERE active = 1 AND groups LIKE ${groupName}`;
+            await sql`SELECT id, name, phone_number, active, province FROM users WHERE active = 1 AND groups LIKE ${groupName}`;
 
           if (groupUsers.length === 0) {
             console.log('No users found in this group.');
@@ -174,12 +187,20 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
 
           for (const user of groupUsers) {
             if (pollType === 'whatsapp') {
+              // if user province is not in affected provinces, continue
+              if (!affectedProvinces.includes(user.province) || user.province === null) {
+                continue;
+              }
+
               console.log(`Sending whatsapp template to user ${user.name} with ID ${user.id}`);
 
               try {
                 let response: Response;
                 if (TEST) {
-                  response = await fetch("https://google.com");
+                  response = new Response(
+                    JSON.stringify({ messages: [{ id: 'test_message_' + Date.now() }] }),
+                    { status: 200, headers: { 'Content-Type': 'application/json' } }
+                  );
                 } else {
                   response = await fetch(
                     `https://graph.facebook.com/v23.0/${PHONE_NUMBER_ID}/messages`,
@@ -271,3 +292,5 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
 } catch (error) {
   console.error(error);
 }
+
+process.exit(0);
