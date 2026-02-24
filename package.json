@@ -31,15 +31,15 @@
   },
   "private": true,
   "scripts": {
-    "dev": "vite dev",
-    "build": "BUILD_STEP=1 vite build",
-    "preview": "vite preview",
-    "prepare": "svelte-kit sync || echo ''",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "format": "prettier --write . --ignore-path .prettierignore",
-    "lint": "prettier --check .",
-    "apply:schema": "bun run src/lib/schema.ts"
+    "dev": "bun --bun run vite dev",
+    "build": "BUILD_STEP=1 bun --bun run vite build",
+    "preview": "bun --bun run vite preview",
+    "prepare": "bun --bun run svelte-kit sync || echo ''",
+    "check": "bun --bun run svelte-kit sync && bun --bun run svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "bun --bun run svelte-kit sync && bun --bun run svelte-check --tsconfig ./tsconfig.json --watch",
+    "format": "bun --bun run prettier --write . --ignore-path .prettierignore",
+    "lint": "bun --bun run prettier --check .",
+    "apply:schema": "bun --bun run src/lib/schema.ts"
   },
   "type": "module"
 }

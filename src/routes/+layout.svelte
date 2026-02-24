@@ -36,13 +36,13 @@
         title: 'Users',
         url: '/users',
         icon: UsersIcon,
-        role: 'admin'
+        role: 'tenant'
       },
       {
         title: 'Groups',
         url: '/usergroups',
         icon: UsersIcon,
-        role: 'admin'
+        role: 'tenant'
       },
       {
         title: 'Tenants',
@@ -79,6 +79,20 @@
       tenants.some((tenant: string) => role === tenant)
     );
   }
+
+  let isUserAdmin: boolean = $state(false);
+
+  if (user && user?.roles.includes('admin')) {
+    isUserAdmin = true;
+  }
+
+  function showUnit(itemRole: string | undefined) {
+    if (itemRole === 'admin' && isUserAdmin) return true;
+    if ((itemRole === 'tenant' && userIsAdminOnATenant) || isUserAdmin) return true;
+    if (itemRole === null || itemRole === undefined) return true;
+
+    return false;
+  }
 </script>
 
 <svelte:head>
@@ -106,9 +120,7 @@
         </Button>
 
         {#each sidebarData.navItems as item}
-          {#if item.role == 'admin' && !userIsAdminOnATenant}
-            <!-- Do not render admin routes if user is not admin -->
-          {:else}
+          {#if showUnit(item.role)}
             <Sidebar.MenuItem class="*:decoration-none">
               <Sidebar.MenuButton isActive={currentPath === item.url} class="w-full py-0!">
                 <a href={item.url} class="flex w-full items-center gap-2 py-4">
@@ -158,9 +170,7 @@
             <Sidebar.GroupContent>
               <Sidebar.Menu>
                 {#each sidebarData.navItems as item}
-                  {#if item.role == 'admin' && !userIsAdminOnATenant}
-                    <!-- Do not render admin routes if user is not admin -->
-                  {:else}
+                  {#if showUnit(item.role)}
                     <Sidebar.MenuItem>
                       <Sidebar.MenuButton isActive={currentPath === item.url} class="w-full py-0!">
                         <a href={item.url} class="flex w-full items-center gap-2">
