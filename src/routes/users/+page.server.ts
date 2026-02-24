@@ -266,8 +266,13 @@ export const actions: Actions = {
       }
 
       try {
-        const userFromSameGroup = await sql`SELECT id FROM users WHERE id = ${id} AND groups LIKE ${'%' + user.groups[0] + '%'}`;
+        const userFromSameGroup = await sql`SELECT id, roles FROM users WHERE id = ${id} AND groups LIKE ${'%' + user.groups[0] + '%'}`;
         if (userFromSameGroup.length === 0) {
+          return fail(403, 'Forbidden');
+        }
+
+        // tenant owners cannot edit admin users
+        if (userFromSameGroup[0].roles === "admin") {
           return fail(403, 'Forbidden');
         }
 
