@@ -1,4 +1,5 @@
 import turkeyJson from "./assets/turkey.json" with { type: "json" };
+import { MapTurkeyJsonProvinces } from "./utils";
 
 export interface GeometryJson {
   type: string
@@ -54,7 +55,10 @@ export function getAffectedProvinces(magnitude: number, lat: number, lng: number
     const provinceLng = feature.geometry.coordinates[0][0][0][0];
     const distance = getDistance(lat, lng, provinceLat, provinceLng);
     if (distance <= maxDistance) {
-      affectedProvinces.add(feature.properties.NAME_1);
+      const provinceName = feature.properties.NAME_1 as string;
+      // Map the province name from the JSON to the standardized province name
+      // @ts-ignore
+      affectedProvinces.add(MapTurkeyJsonProvinces[provinceName]);
     }
   });
 
