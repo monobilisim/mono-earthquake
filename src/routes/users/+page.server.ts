@@ -108,9 +108,17 @@ export const actions: Actions = {
       const name = formData.get('name') as string;
       let phone_number = (formData.get('phone_number') as string).replace(/[^0-9]/g, '');
       const groups = user.groups[0]; // Non admin users can only add users to their own group
-      const roles = `${user.groups[0]}-masked`;
+      let roles = (formData.get('roles') as string).replace(/[^a-zA-Z0-9,-]/g, '') || '';
       const userGroup = formData.get('userGroup') as string;
       const province = formData.get('province') as string;
+
+      if (roles === `${user.groups[0]}-masked`) {
+        // do nothing
+      } else if (roles === user.groups[0]) {
+        // do nothing
+      } else {
+        roles = `${user.groups[0]}-masked`;
+      }
 
       if (!name || !phone_number) {
         return fail(400, 'Name and phone number are required');
@@ -249,9 +257,17 @@ export const actions: Actions = {
       const name = formData.get('name') as string;
       let phone_number = (formData.get('phone_number') as string).replace(/[^0-9+]/g, '');
       const groups = user.groups[0];
-      const roles = `${user.groups[0]}-masked`;
+      let roles = (formData.get('roles') as string).replace(/[^a-zA-Z0-9,-]/g, '') || '';
       const userGroup = formData.get('userGroup') as string;
       const province = formData.get('province') as string;
+
+      if (roles === `${user.groups[0]}-masked`) {
+        // do nothing
+      } else if (roles === user.groups[0]) {
+        // do nothing
+      } else {
+        roles = `${user.groups[0]}-masked`;
+      }
 
       if (!id || !name || !phone_number) {
         return fail(400, 'User ID, name and phone number are required');
@@ -346,8 +362,13 @@ export const actions: Actions = {
       }
 
       try {
-        const userFromSameGroup = await sql`SELECT id FROM users WHERE id = ${id} AND groups LIKE ${'%' + user.groups[0] + '%'}`;
+        const userFromSameGroup = await sql`SELECT id, roles FROM users WHERE id = ${id} AND groups LIKE ${'%' + user.groups[0] + '%'}`;
         if (userFromSameGroup.length === 0) {
+          return fail(403, 'Forbidden');
+        }
+
+        // tenant owners cannot edit admin users
+        if (userFromSameGroup[0].roles === "admin") {
           return fail(403, 'Forbidden');
         }
 
