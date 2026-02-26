@@ -187,9 +187,12 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
 
           for (const user of groupUsers) {
             if (pollType === 'whatsapp') {
-              // if user province is not in affected provinces, continue
-              if (!affectedProvinces.includes(user.province) || user.province === null) {
-                continue;
+
+              if (user.province !== "all") {
+                // if user province is not in affected provinces, continue
+                if (!affectedProvinces.includes(user.province)) {
+                  continue;
+                }
               }
 
               console.log(`Sending whatsapp template to user ${user.name} with ID ${user.id}`);

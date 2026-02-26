@@ -57,6 +57,8 @@ interface AfadEarthquake {
 // Constants
 const AFAD_URL = 'https://deprem.afad.gov.tr/apiv2/event/filter';
 
+const TEST = Bun.env.TEST === 'true';
+
 export class AfadParser {
   async fetchData(
     options: {
@@ -70,8 +72,14 @@ export class AfadParser {
     try {
       // Last 1 hour by default
       const endDate = options.endDate || new Date().toISOString().split('T')[0];
-      const startDate =
-        options.startDate || new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString().split('T')[0];
+      let startDate;
+      if (!TEST) {
+        startDate =
+          options.startDate || new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString().split('T')[0];
+      } else {
+        startDate =
+          options.startDate || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      }
 
       const minimumPollThresholds = await sql`SELECT MIN(threshold) as threshold FROM polls`;
 

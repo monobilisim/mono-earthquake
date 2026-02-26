@@ -544,6 +544,7 @@
                     {newUserProvince != '' ? newUserProvince : 'Select a province'}
                   </Select.Trigger>
                   <Select.Content>
+                    <Select.Item value={'all'} label={'All'} />
                     {#each Provinces as province}
                       <Select.Item value={province} label={province} />
                     {/each}
@@ -897,6 +898,7 @@
                         : 'Select a province'}
                     </Select.Trigger>
                     <Select.Content>
+                      <Select.Item value={'all'} label={'All'} />
                       {#each Provinces as province}
                         <Select.Item value={province} label={province} />
                       {/each}
