@@ -22,6 +22,8 @@
   const groups = data?.groups ?? [];
   // svelte-ignore state_referenced_locally
   const userGroups = $state(data?.userGroups ?? []);
+  // svelte-ignore state_referenced_locally
+  const currentUser = $state(data?.user);
 
   let newUser: boolean = $state(false);
   let newUserName: string = $state('');
@@ -431,21 +433,37 @@
               >
               <Table.Cell>
                 {#if rolesMultiSelectEnabled}
-                  <Select.Root type="multiple" bind:value={newUserRolesMulti} name="roles">
+                  <Select.Root
+                    type="single"
+                    bind:value={newUserRoles}
+                    name="roles"
+                    onValueChange={(e) => {
+                      newUserRoles;
+                    }}
+                  >
                     <Select.Trigger
-                      >{newUserRolesMulti.length > 0
-                        ? newUserRolesMulti.join(',')
-                        : 'Select roles'}</Select.Trigger
+                      >{newUserRoles !== '' ? newUserRoles : 'Select roles'}</Select.Trigger
                     >
 
                     <Select.Content>
-                      <Select.Item value="admin" label="admin" />
-                      <Select.Item value="masked" label="masked" />
-                      <Select.Item
-                        value=""
-                        label="custom role"
-                        onclick={() => (rolesMultiSelectEnabled = !rolesMultiSelectEnabled)}
-                      />
+                      {#if currentUser?.roles.includes('admin')}
+                        <Select.Item value="admin" label="admin" />
+                        <Select.Item value="masked" label="masked" />
+                        <Select.Item
+                          value=""
+                          label="custom role"
+                          onclick={() => (rolesMultiSelectEnabled = !rolesMultiSelectEnabled)}
+                        />
+                      {:else}
+                        <Select.Item
+                          value={currentUser?.groups[0] ?? ''}
+                          label={currentUser?.groups[0] ?? ''}
+                        />
+                        <Select.Item
+                          value={`${currentUser?.groups[0] ?? ''}-masked`}
+                          label={`${currentUser?.groups[0] ?? ''}-masked`}
+                        />
+                      {/if}
                     </Select.Content>
                   </Select.Root>
                 {:else}
@@ -474,7 +492,12 @@
                 {/if}
               </Table.Cell>
               <Table.Cell>
-                {#if tenantsMultiSelectEnabled}
+                {#if !currentUser?.roles.includes('admin')}
+                  {currentUser?.groups[0] ?? ''}
+                  <span class="hidden">
+                    {(newUserGroups = currentUser?.groups[0] ?? '')}
+                  </span>
+                {:else if tenantsMultiSelectEnabled}
                   <Select.Root type="single" bind:value={newUserGroups} name="groups">
                     <Select.Trigger
                       >{newUserGroups != '' ? newUserGroups : 'Select a tenant'}</Select.Trigger
@@ -599,7 +622,11 @@
                   </div>
                 </Table.Cell>
                 <Table.Cell>
-                  <Button onclick={() => (usersEditState[user.id] = true)}>Edit User</Button>
+                  {#if user.roles.includes('admin') && currentUser?.roles.includes('admin')}
+                    <Button onclick={() => (usersEditState[user.id] = true)}>Edit User</Button>
+                  {:else if !user.roles.includes('admin')}
+                    <Button onclick={() => (usersEditState[user.id] = true)}>Edit User</Button>
+                  {/if}
                 </Table.Cell>
                 <Table.Cell>
                   <Dialog.Root>
@@ -793,57 +820,61 @@
                   {/if}
                 </Table.Cell>
                 <Table.Cell>
-                  {#if usersEditData[user.id].tenantMultiSelect}
-                    <Select.Root
-                      type="single"
-                      bind:value={usersEditData[user.id].tenantMulti[0]}
-                      name="groups"
-                    >
-                      <Select.Trigger
-                        >{usersEditData[user.id].tenantMulti[0] != ''
-                          ? usersEditData[user.id].tenantMulti[0]
-                          : 'Select a tenant'}
-                      </Select.Trigger>
-                      <Select.Content>
-                        {#each groups as group}
-                          <Select.Item value={group} label={group} />
-                        {/each}
-                        <Select.Item
-                          value=""
-                          label="custom tenant"
-                          onclick={() =>
-                            (usersEditData[user.id].tenantMultiSelect =
-                              !usersEditData[user.id].tenantMultiSelect)}
-                        />
-                      </Select.Content>
-                    </Select.Root>
+                  {#if currentUser?.roles.includes('admin')}
+                    {#if usersEditData[user.id].tenantMultiSelect}
+                      <Select.Root
+                        type="single"
+                        bind:value={usersEditData[user.id].tenantMulti[0]}
+                        name="groups"
+                      >
+                        <Select.Trigger
+                          >{usersEditData[user.id].tenantMulti[0] != ''
+                            ? usersEditData[user.id].tenantMulti[0]
+                            : 'Select a tenant'}
+                        </Select.Trigger>
+                        <Select.Content>
+                          {#each groups as group}
+                            <Select.Item value={group} label={group} />
+                          {/each}
+                          <Select.Item
+                            value=""
+                            label="custom tenant"
+                            onclick={() =>
+                              (usersEditData[user.id].tenantMultiSelect =
+                                !usersEditData[user.id].tenantMultiSelect)}
+                          />
+                        </Select.Content>
+                      </Select.Root>
+                    {:else}
+                      <Input
+                        name="groups"
+                        placeholder="tenant"
+                        bind:value={usersEditData[user.id].tenantMulti[0]}
+                        onbeforeinput={(e) => {
+                          const type = e.inputType;
+
+                          if (
+                            type === 'deleteContentBackward' ||
+                            type === 'deleteContentForward' ||
+                            type === 'insertLineBreak'
+                          ) {
+                            return;
+                          }
+
+                          e.preventDefault();
+
+                          if (
+                            e.data &&
+                            /[a-zA-Z0-9,]/.test(e.data) &&
+                            usersEditData[user.id].tenantMulti[0].length < 32
+                          ) {
+                            usersEditData[user.id].tenantMulti[0] += e.data;
+                          }
+                        }}
+                      />
+                    {/if}
                   {:else}
-                    <Input
-                      name="groups"
-                      placeholder="tenant"
-                      bind:value={usersEditData[user.id].tenantMulti[0]}
-                      onbeforeinput={(e) => {
-                        const type = e.inputType;
-
-                        if (
-                          type === 'deleteContentBackward' ||
-                          type === 'deleteContentForward' ||
-                          type === 'insertLineBreak'
-                        ) {
-                          return;
-                        }
-
-                        e.preventDefault();
-
-                        if (
-                          e.data &&
-                          /[a-zA-Z0-9,]/.test(e.data) &&
-                          usersEditData[user.id].tenantMulti[0].length < 32
-                        ) {
-                          usersEditData[user.id].tenantMulti[0] += e.data;
-                        }
-                      }}
-                    />
+                    {usersEditData[user.id].tenantMulti[0]}
                   {/if}
                 </Table.Cell>
                 <Table.Cell>
