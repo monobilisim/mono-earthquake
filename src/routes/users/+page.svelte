@@ -763,8 +763,8 @@
                 <Table.Cell>
                   {#if usersEditData[user.id].rolesMultiSelect}
                     <Select.Root
-                      type="multiple"
-                      bind:value={usersEditData[user.id].rolesMulti}
+                      type="single"
+                      bind:value={usersEditData[user.id].rolesMulti[0]}
                       name="roles"
                     >
                       <Select.Trigger
@@ -774,20 +774,28 @@
                       </Select.Trigger>
 
                       <Select.Content>
-                        <Select.Item value="admin" label="admin" />
-                        <Select.Item value="masked" label="masked" />
-                        {#each user.roles as role (role)}
-                          {#if role != 'admin' && role != 'masked'}
-                            <Select.Item value={role} label={role} />
-                          {/if}
-                        {/each}
-                        <Select.Item
-                          value=""
-                          label="custom role"
-                          onclick={() =>
-                            (usersEditData[user.id].rolesMultiSelect =
-                              !usersEditData[user.id].rolesMultiSelect)}
-                        />
+                        {#if currentUser?.roles.includes('admin')}
+                          <Select.Item value="admin" label="admin" />
+                          <Select.Item value="masked" label="masked" />
+                          <Select.Item
+                            value=""
+                            label="custom role"
+                            onclick={() =>
+                              (usersEditData[user.id].rolesMultiSelect =
+                                !usersEditData[user.id].rolesMultiSelect)}
+                          />
+                        {/if}
+
+                        {#if !currentUser?.roles.includes('admin')}
+                          <Select.Item
+                            value={currentUser?.groups[0] ?? ''}
+                            label={currentUser?.groups[0] ?? ''}
+                          />
+                          <Select.Item
+                            value={`${currentUser?.groups[0] ?? ''}-masked`}
+                            label={`${currentUser?.groups[0] ?? ''}-masked`}
+                          />
+                        {/if}
                       </Select.Content>
                     </Select.Root>
                   {:else}
