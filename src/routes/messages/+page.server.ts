@@ -157,8 +157,20 @@ export const actions: Actions = {
             body: JSON.stringify({
               messaging_product: 'whatsapp',
               to: recipient.phone_number,
-              type: 'text',
-              text: { body: message }
+              type: 'template',
+              template: {
+                name: 'deprem',
+                language: { code: 'tr' },
+                components: [
+                  {
+                    type: 'body',
+                    parameters: [
+                      { type: 'text', parameter_name: 'adsoyad', text: recipient.name },
+                      { type: 'text', parameter_name: 'detay', text: message }
+                    ]
+                  }
+                ]
+              }
             })
           });
         }

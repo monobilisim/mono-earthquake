@@ -13,7 +13,7 @@
   const groups: string[] = data?.groups ?? [];
   const recipientCount: number = data?.recipientCount ?? 0;
 
-  const MAX_MESSAGE_LENGTH = 4096;
+  const MAX_MESSAGE_LENGTH = 1024;
 
   // svelte-ignore state_referenced_locally
   let message = $state('');
