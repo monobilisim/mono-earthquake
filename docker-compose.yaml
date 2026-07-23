@@ -9,6 +9,7 @@ services:
       - '${PORT}:${PORT}'
     volumes:
       - ./data:/mono-earthquake/data
+      - ./logs:/mono-earthquake/logs
     environment:
       - PORT=${PORT}
       - POLL_INTERVAL=${POLL_INTERVAL}
