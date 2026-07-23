@@ -64,7 +64,13 @@ export const waMessages = sqliteTable('wa_messages', {
   pollName: text('poll_name', { length: 255 }).default(sql`(NULL)`),
   earthquakeId: integer('earthquake_id').default(sql`(NULL)`),
   updatedAt: numeric('updated_at').notNull(),
-  createdAt: text('created_at').notNull()
+  createdAt: text('created_at').notNull(),
+  // Number of follow-up (reminder) messages already sent for this notification.
+  // 0 = only the initial message; 1 = 2nd sent; 2 = 3rd sent.
+  reminderCount: integer('reminder_count').default(0).notNull(),
+  // Set from the WhatsApp callbacks: when the message was read / replied to.
+  readAt: integer('read_at', { mode: 'timestamp' }).default(sql`NULL`),
+  replyAt: integer('reply_at', { mode: 'timestamp' }).default(sql`NULL`)
 });
 
 export const waMessagesFailed = sqliteTable('wa_messages_failed', {
