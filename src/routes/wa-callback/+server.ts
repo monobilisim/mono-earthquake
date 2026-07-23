@@ -4,6 +4,8 @@ export const POST = async ({ request }): Promise<Response> => {
   try {
     const data = await request.json();
 
+    console.log(data);
+
     const value = data.entry[0].changes[0].value;
 
     let is_read = false;

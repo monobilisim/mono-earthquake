@@ -104,6 +104,10 @@ try {
     }
   }
 
+  // --- Otomatik WhatsApp mesaj gönderimi şimdilik devre dışı bırakıldı (yoruma alındı) ---
+  // Deprem verisini çekip DB'ye kaydetme çalışmaya devam eder; yalnızca mesaj gönderimi kapalı.
+  // Tekrar açmak için aşağıdaki blok yorumunu kaldırın.
+  /*
   const earthquakePoll = <Poll>polls.find((poll) => poll.name === 'deprem');
   const pollType = earthquakePoll.type;
   const earthquakeThreshold = earthquakePoll.threshold;
@@ -292,6 +296,8 @@ Enough time has not passed yet. (${HOW_MANY_MINUTES_BETWEEN_MESSAGES} minutes)`
   } else {
     console.log('No new records found.');
   }
+  */
+  // --- Otomatik mesaj gönderimi devre dışı bloğunun sonu ---
 } catch (error) {
   console.error(error);
 }

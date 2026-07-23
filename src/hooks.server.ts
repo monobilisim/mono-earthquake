@@ -1,5 +1,6 @@
-import type { ServerInit } from '@sveltejs/kit';
+import type { ServerInit, Handle } from '@sveltejs/kit';
 import { logger } from '$lib/server/logger';
+import { sequence } from '@sveltejs/kit/hooks';
 const POLL_INTERVAL: number = parseInt(<any>Bun.env.POLL_INTERVAL) || 60;
 
 const log = logger.child({ scope: 'http' });
@@ -15,6 +16,8 @@ const handleLog: Handle = async ({ event, resolve }) => {
   );
   return response;
 };
+
+export const handle: Handle = sequence(handleLog);
 
 export const init: ServerInit = async () => {
   const EqWorker = () => {

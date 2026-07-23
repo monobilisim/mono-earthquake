@@ -19,6 +19,7 @@
   import UsersIcon from '@lucide/svelte/icons/users';
   import LayersIcon from '@lucide/svelte/icons/layers';
   import ActivityIcon from '@lucide/svelte/icons/activity';
+  import SendIcon from '@lucide/svelte/icons/send';
   import MenuIcon from '@lucide/svelte/icons/menu';
   import * as Sidebar from '$lib/components/ui/sidebar/index.js';
   import { Button } from '$lib/components/ui/button/index.js';
@@ -42,6 +43,12 @@
         title: 'Groups',
         url: '/usergroups',
         icon: UsersIcon,
+        role: 'tenant'
+      },
+      {
+        title: 'Send Message',
+        url: '/messages',
+        icon: SendIcon,
         role: 'tenant'
       },
       {
