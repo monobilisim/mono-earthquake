@@ -1,6 +1,20 @@
 import type { ServerInit } from '@sveltejs/kit';
-
+import { logger } from '$lib/server/logger';
 const POLL_INTERVAL: number = parseInt(<any>Bun.env.POLL_INTERVAL) || 60;
+
+const log = logger.child({ scope: 'http' });
+
+const handleLog: Handle = async ({ event, resolve }) => {
+  const start = performance.now();
+  const response = await resolve(event);
+  const ms = Math.round(performance.now() - start);
+  // Message reads cleanly on the dev terminal; the fields are kept for the JSON files.
+  log.info(
+    { method: event.request.method, path: event.url.pathname, status: response.status, ms },
+    `${event.request.method} ${event.url.pathname} ${response.status} (${ms}ms)`
+  );
+  return response;
+};
 
 export const init: ServerInit = async () => {
   const EqWorker = () => {
