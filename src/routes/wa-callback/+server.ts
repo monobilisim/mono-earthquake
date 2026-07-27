@@ -1,8 +1,9 @@
 import { db } from '$lib/server/db';
 import { waMessages } from '$lib/server/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import dayjs from 'dayjs';
 
-export const POST = async ({ request }): Promise<Response> => {
+export const POST = async ({ request }: { request: Request }): Promise<Response> => {
   try {
     const data = await request.json();
 
@@ -43,8 +44,7 @@ export const POST = async ({ request }): Promise<Response> => {
           .set({
             isRead: sql`true`,
             updatedAt: formatted,
-            // keep the first read timestamp
-            readAt: sql`COALESCE(${waMessages.readAt}, unixepoch())`
+            readAt: dayjs().toDate()
           })
           .where(eq(waMessages.id, id));
       } catch (error) {
@@ -60,8 +60,7 @@ export const POST = async ({ request }): Promise<Response> => {
             isRead: sql`true`,
             message,
             updatedAt: formatted,
-            readAt: sql`COALESCE(${waMessages.readAt}, unixepoch())`,
-            replyAt: sql`COALESCE(${waMessages.replyAt}, unixepoch())`
+            replyAt: dayjs().toDate()
           })
           .where(eq(waMessages.id, id));
       } catch (error) {
