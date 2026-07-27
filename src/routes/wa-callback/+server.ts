@@ -1,4 +1,6 @@
-import sql from '$lib/db';
+import { db } from '$lib/server/db';
+import { waMessages } from '$lib/server/db/schema';
+import { eq, sql } from 'drizzle-orm';
 
 export const POST = async ({ request }): Promise<Response> => {
   try {
@@ -36,7 +38,15 @@ export const POST = async ({ request }): Promise<Response> => {
 
     if (is_read === true && message === null) {
       try {
-        await sql`UPDATE wa_messages SET is_read = true, updated_at = ${formatted} WHERE id = ${id}`;
+        await db
+          .update(waMessages)
+          .set({
+            isRead: sql`true`,
+            updatedAt: formatted,
+            // keep the first read timestamp
+            readAt: sql`COALESCE(${waMessages.readAt}, unixepoch())`
+          })
+          .where(eq(waMessages.id, id));
       } catch (error) {
         console.error('Error updating WhatsApp message status in database:', error);
       }
@@ -44,7 +54,16 @@ export const POST = async ({ request }): Promise<Response> => {
 
     if (message !== null) {
       try {
-        await sql`UPDATE wa_messages SET is_read = true, message = ${message}, updated_at = ${formatted} WHERE id = ${id}`;
+        await db
+          .update(waMessages)
+          .set({
+            isRead: sql`true`,
+            message,
+            updatedAt: formatted,
+            readAt: sql`COALESCE(${waMessages.readAt}, unixepoch())`,
+            replyAt: sql`COALESCE(${waMessages.replyAt}, unixepoch())`
+          })
+          .where(eq(waMessages.id, id));
       } catch (error) {
         console.error('Error updating WhatsApp message status and message in database:', error);
       }
