@@ -13,4 +13,5 @@ services:
     environment:
       - PORT=${PORT}
       - POLL_INTERVAL=${POLL_INTERVAL}
+    env_file: .env
     restart: unless-stopped
